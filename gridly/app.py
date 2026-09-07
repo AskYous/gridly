@@ -403,6 +403,16 @@ def _short_path(path: Path) -> str:
         return str(path)
 
 
+def _one_line(text: str) -> Text:
+    """Squeeze a value onto the one line a grid row has, marking where it breaks."""
+    parts = text.replace("\t", " ").split("\n")
+    line = Text(parts[0])
+    for part in parts[1:]:
+        line.append(" ⏎ ", "dim")
+        line.append(part)
+    return line
+
+
 def _render(column: Column, value: Any) -> Text:
     """How a value looks inside the grid."""
     if value is None:
@@ -415,7 +425,7 @@ def _render(column: Column, value: Any) -> Text:
         return Text(display(column.type, value), "magenta")
     if column.type is ColumnType.SELECT:
         return Text(display(column.type, value), "yellow")
-    return Text(display(column.type, value))
+    return _one_line(display(column.type, value))
 
 
 def main(argv: list[str] | None = None) -> int:

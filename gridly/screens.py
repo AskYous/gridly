@@ -9,7 +9,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, OptionList, Select, Static
+from textual.widgets import Button, Input, Label, OptionList, Select, Static, TextArea
 
 from .coltypes import ColumnType, ValidationError, display, parse
 from .store import Column, Row
@@ -17,40 +17,74 @@ from .store import Column, Row
 CLEAR_OPTION = "— clear —"
 
 
-class CellEditScreen(ModalScreen[tuple[bool, Any]]):
-    """Free-text editor for text, number and date cells."""
+def build_editor(column: Column, value: Any, field_id: str):
+    """The right widget for a column's type, pre-filled with `value`."""
+    if column.type is ColumnType.BOOLEAN:
+        return Select(
+            [("Yes", "yes"), ("No", "no")],
+            value="yes" if value else "no" if value is not None else Select.NULL,
+            prompt="(not set)",
+            id=field_id,
+        )
+    if column.type is ColumnType.SELECT:
+        return Select(
+            [(option, option) for option in column.options],
+            value=value if value in column.options else Select.NULL,
+            prompt="(not set)",
+            id=field_id,
+        )
+    if column.type is ColumnType.TEXT:
+        # Text may contain newlines — a single-line Input would hide all but the first.
+        return TextArea(display(column.type, value), soft_wrap=True, id=field_id)
+    return Input(
+        value=display(column.type, value), placeholder=column.type.hint, id=field_id
+    )
 
-    BINDINGS = [Binding("escape", "cancel", "Cancel", show=False)]
+
+def read_editor(field) -> str:
+    """The raw text a `build_editor` widget is holding."""
+    return field.text if isinstance(field, TextArea) else field.value
+
+
+class CellEditScreen(ModalScreen[tuple[bool, Any]]):
+    """Editor for text, number and date cells."""
+
+    BINDINGS = [
+        Binding("ctrl+s", "save", "Save", show=False),
+        Binding("escape", "cancel", "Cancel", show=False),
+    ]
 
     def __init__(self, column: Column, value: Any) -> None:
         super().__init__()
         self.column = column
         self.value = value
+        # Text can hold newlines, so it needs an editor that can show them.
+        self.multiline = column.type is ColumnType.TEXT
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog"):
             yield Label(f"{self.column.name}  [dim]{self.column.type.label}[/]")
-            yield Input(
-                value=display(self.column.type, self.value),
-                placeholder=self.column.type.hint,
-                id="value",
-            )
+            yield build_editor(self.column, self.value, "value")
             yield Static("", id="error", classes="error")
+            save_key = "ctrl+s" if self.multiline else "enter"
             yield Static(
-                "[dim]enter save · esc cancel · empty clears the cell[/]",
+                f"[dim]{save_key} save · esc cancel · empty clears the cell[/]",
                 classes="dialog-help",
             )
 
     def on_mount(self) -> None:
-        value_input = self.query_one("#value", Input)
-        value_input.focus()
-        value_input.cursor_position = len(value_input.value)
+        editor = self.query_one("#value")
+        editor.focus()
+        # Start where you would carry on typing, not in front of what is there.
+        if isinstance(editor, Input):
+            editor.cursor_position = len(editor.value)
+        elif isinstance(editor, TextArea):
+            editor.move_cursor(editor.document.end)
 
     @on(Input.Submitted)
-    def save(self) -> None:
-        raw = self.query_one("#value", Input).value
+    def action_save(self) -> None:
         try:
-            parsed = parse(self.column.type, raw, self.column.options)
+            parsed = parse(self.column.type, read_editor(self.query_one("#value")), self.column.options)
         except ValidationError as error:
             self.query_one("#error", Static).update(f"[red]{error}[/]")
             return
@@ -123,32 +157,13 @@ class RowFormScreen(ModalScreen[dict[int, Any] | None]):
                         yield self._field(column)
                 yield Static("", id="error", classes="error")
                 yield Static(
-                    "[dim]tab move · ctrl+s or enter save · esc cancel[/]",
+                    "[dim]tab move · ctrl+s save · esc cancel[/]",
                     classes="dialog-help",
                 )
 
     def _field(self, column: Column):
-        value = self.row.values.get(column.id)
-        field_id = f"field-{column.id}"
-
-        if column.type is ColumnType.BOOLEAN:
-            return Select(
-                [("Yes", "yes"), ("No", "no")],
-                value="yes" if value else "no" if value is not None else Select.NULL,
-                prompt="(not set)",
-                id=field_id,
-            )
-        if column.type is ColumnType.SELECT:
-            return Select(
-                [(option, option) for option in column.options],
-                value=value if value in column.options else Select.NULL,
-                prompt="(not set)",
-                id=field_id,
-            )
-        return Input(
-            value=display(column.type, value),
-            placeholder=column.type.hint,
-            id=field_id,
+        return build_editor(
+            column, self.row.values.get(column.id), f"field-{column.id}"
         )
 
     def on_mount(self) -> None:
@@ -168,7 +183,9 @@ class RowFormScreen(ModalScreen[dict[int, Any] | None]):
                     values[column.id] = chosen
                 continue
             try:
-                values[column.id] = parse(column.type, field.value, column.options)
+                values[column.id] = parse(
+                    column.type, read_editor(field), column.options
+                )
             except ValidationError as error:
                 self.query_one("#error", Static).update(f"[red]{column.name}: {error}[/]")
                 field.focus()
@@ -294,6 +311,7 @@ class HelpScreen(ModalScreen[None]):
     KEYS = [
         ("arrows", "Move around the grid"),
         ("enter", "Edit the current cell (toggles a yes/no cell)"),
+        ("ctrl+s", "Save a text cell — enter starts a new line there"),
         ("f", "Edit the whole row as a form"),
         ("space", "Same as enter"),
         ("backspace", "Clear the current cell"),

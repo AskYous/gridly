@@ -30,6 +30,7 @@ where it can't, telling you how many it dropped.
 | ----------- | --------------------------------------------- |
 | arrows      | move around the grid                          |
 | `enter`     | edit the cell (a boolean cell just toggles)   |
+| `ctrl+s`    | save a text cell (`enter` adds a line there)  |
 | `space`     | same as `enter`                               |
 | `f`         | open the whole row as a form                  |
 | `backspace` | clear the cell                                |
@@ -45,6 +46,15 @@ where it can't, telling you how many it dropped.
 | `?`         | help                                          |
 | `q`         | quit                                          |
 
+## Multi-line text
+
+A text column holds newlines. Since a grid row is one line tall, the grid
+collapses them onto that line and marks each break with a dim `⏎` — the value
+itself is untouched. Open the cell with `enter`, or the row with `f`, and you
+get a real text box with the lines laid out properly: `enter` starts a new
+line, `ctrl+s` saves, `esc` throws the edit away. Number and date columns keep
+their one-line input, where `enter` still saves.
+
 ## Pasting from a spreadsheet
 
 Copy a range in Google Sheets, Excel or Numbers and paste it straight into the
@@ -52,6 +62,7 @@ grid. The block lands with its top-left cell at the cursor and spills right and
 down from there, adding rows at the bottom when it needs more than the sheet
 has. Cells are read through the target column's type, so `TRUE` lands in a
 boolean column and `1,200` in a number one; blank cells clear their target.
+A cell containing newlines arrives quoted and is stored whole, newlines and all.
 
 Two things it deliberately does not do: it never invents columns, so a block
 wider than the sheet is clipped and the notification tells you by how much, and
