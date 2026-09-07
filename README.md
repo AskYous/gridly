@@ -40,9 +40,24 @@ where it can't, telling you how many it dropped.
 | `e`         | edit the current column (name, type, options) |
 | `x`         | delete the current column                     |
 | `[` / `]`   | move the current column left / right          |
+| `cmd/ctrl+v`| paste cells copied from a spreadsheet         |
 | `t`         | change the colour theme                       |
 | `?`         | help                                          |
 | `q`         | quit                                          |
+
+## Pasting from a spreadsheet
+
+Copy a range in Google Sheets, Excel or Numbers and paste it straight into the
+grid. The block lands with its top-left cell at the cursor and spills right and
+down from there, adding rows at the bottom when it needs more than the sheet
+has. Cells are read through the target column's type, so `TRUE` lands in a
+boolean column and `1,200` in a number one; blank cells clear their target.
+
+Two things it deliberately does not do: it never invents columns, so a block
+wider than the sheet is clipped and the notification tells you by how much, and
+it asks before replacing cells that already have values, since there is no undo.
+Values that don't fit their column's type are left alone and counted in the
+same notification.
 
 ## Row form
 

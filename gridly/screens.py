@@ -264,16 +264,17 @@ class ConfirmScreen(ModalScreen[bool]):
         Binding("y", "yes", "Yes", show=False),
     ]
 
-    def __init__(self, message: str) -> None:
+    def __init__(self, message: str, confirm: str = "Delete") -> None:
         super().__init__()
         self.message = message
+        self.confirm = confirm
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog"):
             yield Label(self.message)
             yield Static("[dim]y confirm · n or esc cancel[/]", classes="dialog-help")
             with Horizontal(classes="buttons"):
-                yield Button("Delete", variant="error", id="yes")
+                yield Button(self.confirm, variant="error", id="yes")
                 yield Button("Cancel", id="no")
 
     @on(Button.Pressed, "#yes")
@@ -303,6 +304,7 @@ class HelpScreen(ModalScreen[None]):
         ("e", "Edit the current column (name, type, options)"),
         ("x", "Delete the current column"),
         ("[ / ]", "Move the current column left / right"),
+        ("cmd/ctrl+v", "Paste cells copied from a spreadsheet"),
         ("t", "Change the colour theme"),
         ("?", "This help"),
         ("q", "Quit"),

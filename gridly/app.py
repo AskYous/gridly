@@ -7,13 +7,13 @@ from pathlib import Path
 from typing import Any
 
 from rich.text import Text
-from textual import on
+from textual import events, on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.coordinate import Coordinate
 from textual.widgets import DataTable, Footer, Header, Static
 
-from .coltypes import ColumnType, display
+from .coltypes import ColumnType, ValidationError, display, parse
 from .screens import (
     CellEditScreen,
     ColumnScreen,
@@ -22,6 +22,7 @@ from .screens import (
     PickScreen,
     RowFormScreen,
 )
+from .paste import parse_block
 from .store import Column, Row, Sheet
 
 DEFAULT_FILE = "sheet.gridly"
@@ -198,6 +199,92 @@ class GridlyApp(App[None]):
             )
 
         self.push_screen(RowFormScreen(self._columns, row, number, len(self._rows)), done)
+
+    # ----------------------------------------------------------------- paste
+
+    def on_paste(self, event: events.Paste) -> None:
+        """Drop a block of cells copied from a spreadsheet in at the cursor."""
+        if self.screen is not self.screen_stack[0]:
+            return
+        block = parse_block(event.text)
+        if not block:
+            return
+        event.stop()
+        if not self._columns:
+            self.notify("Add a column first (c).", severity="warning")
+            return
+
+        top, left = self.table.cursor_coordinate
+        width = max(len(line) for line in block)
+        columns = self._columns[left : left + width]
+        clipped = width - len(columns)
+        new_rows = max(0, top + len(block) - len(self._rows))
+
+        overwrites = sum(
+            1
+            for target, value in self._paste_targets(block, columns, top)
+            if target is not None and value != target
+        )
+        shape = f"{len(block)} × {len(columns)}"
+
+        def apply(confirmed: bool | None = True) -> None:
+            if confirmed:
+                self._apply_paste(block, columns, top, new_rows, clipped)
+
+        if overwrites:
+            self.push_screen(
+                ConfirmScreen(
+                    f"Paste {shape} here? It replaces {overwrites} filled "
+                    f"{_plural(overwrites, 'cell')}.",
+                    confirm="Paste",
+                ),
+                apply,
+            )
+        else:
+            apply()
+
+    def _paste_targets(self, block, columns: list[Column], top: int):
+        """Yield (existing value, pasted value) for cells that already have a row."""
+        for offset, line in enumerate(block):
+            index = top + offset
+            if index >= len(self._rows):
+                continue
+            row = self._rows[index]
+            for across, column in enumerate(columns):
+                raw = line[across] if across < len(line) else ""
+                try:
+                    value = parse(column.type, raw, column.options)
+                except ValidationError:
+                    continue
+                yield row.values.get(column.id), value
+
+    def _apply_paste(self, block, columns: list[Column], top: int, new_rows: int, clipped: int) -> None:
+        for _ in range(new_rows):
+            self.sheet.add_row()
+        rows = self.sheet.rows()
+
+        written = skipped = 0
+        for offset, line in enumerate(block):
+            row = rows[top + offset]
+            for across, column in enumerate(columns):
+                raw = line[across] if across < len(line) else ""
+                try:
+                    value = parse(column.type, raw, column.options)
+                except ValidationError:
+                    skipped += 1
+                    continue
+                self.sheet.set_cell(row.id, column.id, value)
+                written += 1
+
+        self.reload(Coordinate(top, self.table.cursor_coordinate.column))
+        parts = [f"Pasted {len(block)} × {len(columns)}"]
+        if new_rows:
+            parts.append(f"{new_rows} {_plural(new_rows, 'row')} added")
+        if skipped:
+            parts.append(f"{skipped} {_plural(skipped, 'value')} did not fit the column type")
+        if clipped:
+            parts.append(f"{clipped} {_plural(clipped, 'column')} ran off the end")
+        self.notify(" · ".join(parts), severity="warning" if skipped or clipped else "information")
 
     # ------------------------------------------------------------------- rows
 
