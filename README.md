@@ -31,6 +31,7 @@ where it can't, telling you how many it dropped.
 | arrows      | move around the grid                          |
 | `enter`     | edit the cell (a boolean cell just toggles)   |
 | `space`     | same as `enter`                               |
+| `f`         | open the whole row as a form                  |
 | `backspace` | clear the cell                                |
 | `a`         | add a row at the bottom                       |
 | `i`         | insert a row below the cursor                 |
@@ -42,6 +43,14 @@ where it can't, telling you how many it dropped.
 | `t`         | change the colour theme                       |
 | `?`         | help                                          |
 | `q`         | quit                                          |
+
+## Row form
+
+Grid editing gets cramped once a sheet has more than a handful of columns.
+`f` opens the row under the cursor as a form — one labelled field per column,
+`tab` between them, `ctrl+s` or `enter` to save, `esc` to throw the edits away.
+Nothing is written until you save, and a bad value keeps the form open with the
+offending field focused.
 
 ## File format
 

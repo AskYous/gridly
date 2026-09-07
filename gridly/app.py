@@ -14,7 +14,14 @@ from textual.coordinate import Coordinate
 from textual.widgets import DataTable, Footer, Header, Static
 
 from .coltypes import ColumnType, display
-from .screens import CellEditScreen, ColumnScreen, ConfirmScreen, HelpScreen, PickScreen
+from .screens import (
+    CellEditScreen,
+    ColumnScreen,
+    ConfirmScreen,
+    HelpScreen,
+    PickScreen,
+    RowFormScreen,
+)
 from .store import Column, Row, Sheet
 
 DEFAULT_FILE = "sheet.gridly"
@@ -26,6 +33,7 @@ class GridlyApp(App[None]):
 
     BINDINGS = [
         Binding("space", "edit_cell", "Edit"),
+        Binding("f", "edit_row", "Form"),
         Binding("backspace", "clear_cell", "Clear"),
         Binding("a", "add_row", "+Row"),
         Binding("i", "insert_row", "Insert row", show=False),
@@ -166,6 +174,30 @@ class GridlyApp(App[None]):
         row.values[column.id] = value
         self.table.update_cell_at(self.table.cursor_coordinate, _render(column, value))
         self._update_status()
+
+    def action_edit_row(self) -> None:
+        row = self.current_row()
+        if row is None or not self._columns:
+            self.notify("Nothing to edit yet.", severity="warning")
+            return
+        number = self._rows.index(row) + 1
+
+        def done(values: dict[int, Any] | None) -> None:
+            if values is None:
+                return
+            changed = [
+                (column_id, value)
+                for column_id, value in values.items()
+                if value != row.values.get(column_id)
+            ]
+            for column_id, value in changed:
+                self.sheet.set_cell(row.id, column_id, value)
+            self.reload()
+            self.notify(
+                f"Saved row {number}." if changed else f"Row {number} unchanged."
+            )
+
+        self.push_screen(RowFormScreen(self._columns, row, number, len(self._rows)), done)
 
     # ------------------------------------------------------------------- rows
 

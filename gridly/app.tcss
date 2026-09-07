@@ -25,6 +25,45 @@ Screen {
     width: 60;
 }
 
+/* The form takes over the screen, but the fields stay a readable width. */
+.form {
+    width: 100%;
+    height: 100%;
+    align-horizontal: center;
+    background: $surface;
+}
+
+.form-inner {
+    width: 68;
+    max-width: 100%;
+    height: 100%;
+    padding: 1 2;
+}
+
+.form-fields {
+    height: 1fr;
+    scrollbar-size-vertical: 1;
+}
+
+.form Label {
+    width: 1fr;
+    padding-bottom: 1;
+}
+
+.form .dialog-title {
+    padding-bottom: 1;
+    text-style: bold;
+}
+
+.form .field-label {
+    padding: 1 0 0 0;
+    color: $text-muted;
+}
+
+.form Input, .form Select {
+    width: 1fr;
+}
+
 .dialog Label {
     width: 1fr;
     padding-bottom: 1;
@@ -69,7 +108,7 @@ Screen {
     margin-left: 1;
 }
 
-CellEditScreen, PickScreen, ColumnScreen, ConfirmScreen, HelpScreen {
+CellEditScreen, PickScreen, ColumnScreen, ConfirmScreen, HelpScreen, RowFormScreen {
     align: center middle;
     background: $background 60%;
 }

@@ -7,12 +7,12 @@ from typing import Any
 from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, OptionList, Select, Static
 
 from .coltypes import ColumnType, ValidationError, display, parse
-from .store import Column
+from .store import Column, Row
 
 CLEAR_OPTION = "— clear —"
 
@@ -91,6 +91,92 @@ class PickScreen(ModalScreen[tuple[bool, Any]]):
 
     def action_cancel(self) -> None:
         self.dismiss((False, None))
+
+
+class RowFormScreen(ModalScreen[dict[int, Any] | None]):
+    """One row, one field per column — for when the grid is too cramped to think in."""
+
+    BINDINGS = [
+        Binding("ctrl+s", "save", "Save", show=False),
+        Binding("escape", "cancel", "Cancel", show=False),
+    ]
+
+    def __init__(self, columns: list[Column], row: Row, number: int, total: int) -> None:
+        super().__init__()
+        self.columns = columns
+        self.row = row
+        self.number = number
+        self.total = total
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="form"):
+            with Vertical(classes="form-inner"):
+                yield Label(
+                    f"Row {self.number} of {self.total}", classes="dialog-title"
+                )
+                with VerticalScroll(classes="form-fields"):
+                    for column in self.columns:
+                        yield Label(
+                            f"{column.name}  [dim]{column.type.label}[/]",
+                            classes="field-label",
+                        )
+                        yield self._field(column)
+                yield Static("", id="error", classes="error")
+                yield Static(
+                    "[dim]tab move · ctrl+s or enter save · esc cancel[/]",
+                    classes="dialog-help",
+                )
+
+    def _field(self, column: Column):
+        value = self.row.values.get(column.id)
+        field_id = f"field-{column.id}"
+
+        if column.type is ColumnType.BOOLEAN:
+            return Select(
+                [("Yes", "yes"), ("No", "no")],
+                value="yes" if value else "no" if value is not None else Select.NULL,
+                prompt="(not set)",
+                id=field_id,
+            )
+        if column.type is ColumnType.SELECT:
+            return Select(
+                [(option, option) for option in column.options],
+                value=value if value in column.options else Select.NULL,
+                prompt="(not set)",
+                id=field_id,
+            )
+        return Input(
+            value=display(column.type, value),
+            placeholder=column.type.hint,
+            id=field_id,
+        )
+
+    def on_mount(self) -> None:
+        if self.columns:
+            self.query_one(f"#field-{self.columns[0].id}").focus()
+
+    @on(Input.Submitted)
+    def action_save(self) -> None:
+        values: dict[int, Any] = {}
+        for column in self.columns:
+            field = self.query_one(f"#field-{column.id}")
+            if isinstance(field, Select):
+                chosen = None if field.value is Select.NULL else field.value
+                if column.type is ColumnType.BOOLEAN:
+                    values[column.id] = None if chosen is None else chosen == "yes"
+                else:
+                    values[column.id] = chosen
+                continue
+            try:
+                values[column.id] = parse(column.type, field.value, column.options)
+            except ValidationError as error:
+                self.query_one("#error", Static).update(f"[red]{column.name}: {error}[/]")
+                field.focus()
+                return
+        self.dismiss(values)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
 
 
 class ColumnScreen(ModalScreen[tuple[str, ColumnType, list[str]] | None]):
@@ -207,6 +293,7 @@ class HelpScreen(ModalScreen[None]):
     KEYS = [
         ("arrows", "Move around the grid"),
         ("enter", "Edit the current cell (toggles a yes/no cell)"),
+        ("f", "Edit the whole row as a form"),
         ("space", "Same as enter"),
         ("backspace", "Clear the current cell"),
         ("a", "Add a row at the bottom"),
@@ -216,6 +303,7 @@ class HelpScreen(ModalScreen[None]):
         ("e", "Edit the current column (name, type, options)"),
         ("x", "Delete the current column"),
         ("[ / ]", "Move the current column left / right"),
+        ("t", "Change the colour theme"),
         ("?", "This help"),
         ("q", "Quit"),
     ]
