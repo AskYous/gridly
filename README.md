@@ -39,8 +39,18 @@ where it can't, telling you how many it dropped.
 | `e`         | edit the current column (name, type, options) |
 | `x`         | delete the current column                     |
 | `[` / `]`   | move the current column left / right          |
+| `t`         | change the colour theme                       |
 | `?`         | help                                          |
 | `q`         | quit                                          |
+
+## Themes
+
+`t` opens the theme picker. Arrowing through the list repaints the app as you
+go, `enter` keeps the theme, `esc` puts back the one you had. Your choice is
+remembered in `~/.config/gridly/config.json`.
+
+Gridly paints its own colours rather than borrowing your terminal's. Pick
+`ansi-dark` or `ansi-light` if you would rather it used your terminal palette.
 
 ## File format
 
