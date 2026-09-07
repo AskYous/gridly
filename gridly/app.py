@@ -13,16 +13,8 @@ from textual.binding import Binding
 from textual.coordinate import Coordinate
 from textual.widgets import DataTable, Footer, Header, Static
 
-from . import config
 from .coltypes import ColumnType, display
-from .screens import (
-    CellEditScreen,
-    ColumnScreen,
-    ConfirmScreen,
-    HelpScreen,
-    PickScreen,
-    ThemeScreen,
-)
+from .screens import CellEditScreen, ColumnScreen, ConfirmScreen, HelpScreen, PickScreen
 from .store import Column, Row, Sheet
 
 DEFAULT_FILE = "sheet.gridly"
@@ -43,7 +35,7 @@ class GridlyApp(App[None]):
         Binding("x", "delete_column", "-Col"),
         Binding("left_square_bracket", "move_column(-1)", "Move col left", show=False),
         Binding("right_square_bracket", "move_column(1)", "Move col right", show=False),
-        Binding("t", "theme", "Theme"),
+        Binding("t", "change_theme", "Theme"),
         Binding("question_mark", "help", "Help"),
         Binding("q", "quit", "Quit"),
     ]
@@ -64,9 +56,6 @@ class GridlyApp(App[None]):
         yield Footer()
 
     def on_mount(self) -> None:
-        saved = config.load().get("theme")
-        if saved in self.available_themes:
-            self.theme = saved
         table = self.query_one("#grid", DataTable)
         table.show_row_labels = True
         table.focus()
@@ -276,14 +265,6 @@ class GridlyApp(App[None]):
             )
 
     # ------------------------------------------------------------------ misc
-
-    def action_theme(self) -> None:
-        def done(theme: str | None) -> None:
-            if theme is not None:
-                config.save(theme=theme)
-                self.notify(f"Theme set to {theme}.")
-
-        self.push_screen(ThemeScreen(), done)
 
     def action_help(self) -> None:
         self.push_screen(HelpScreen())

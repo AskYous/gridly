@@ -199,44 +199,6 @@ class ConfirmScreen(ModalScreen[bool]):
         self.dismiss(False)
 
 
-class ThemeScreen(ModalScreen[str | None]):
-    """Theme picker that applies each theme as you move through the list."""
-
-    BINDINGS = [Binding("escape", "cancel", "Cancel", show=False)]
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.original = ""
-
-    def compose(self) -> ComposeResult:
-        with Vertical(classes="dialog"):
-            yield Label("Theme")
-            yield OptionList(*sorted(self.app.available_themes), id="themes")
-            yield Static(
-                "[dim]↑↓ preview · enter keep · esc revert[/]", classes="dialog-help"
-            )
-
-    def on_mount(self) -> None:
-        self.original = self.app.theme
-        themes = self.query_one("#themes", OptionList)
-        themes.focus()
-        names = sorted(self.app.available_themes)
-        if self.original in names:
-            themes.highlighted = names.index(self.original)
-
-    @on(OptionList.OptionHighlighted)
-    def preview(self, event: OptionList.OptionHighlighted) -> None:
-        self.app.theme = str(event.option.prompt)
-
-    @on(OptionList.OptionSelected)
-    def keep(self, event: OptionList.OptionSelected) -> None:
-        self.dismiss(str(event.option.prompt))
-
-    def action_cancel(self) -> None:
-        self.app.theme = self.original
-        self.dismiss(None)
-
-
 class HelpScreen(ModalScreen[None]):
     """Keyboard reference."""
 
@@ -254,7 +216,6 @@ class HelpScreen(ModalScreen[None]):
         ("e", "Edit the current column (name, type, options)"),
         ("x", "Delete the current column"),
         ("[ / ]", "Move the current column left / right"),
-        ("t", "Change the colour theme"),
         ("?", "This help"),
         ("q", "Quit"),
     ]
