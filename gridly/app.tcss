@@ -1,0 +1,75 @@
+Screen {
+    background: $surface;
+}
+
+#grid {
+    height: 1fr;
+    width: 1fr;
+}
+
+#status {
+    height: 1;
+    padding: 0 1;
+    background: $panel;
+}
+
+.dialog {
+    width: 52;
+    height: auto;
+    padding: 1 2;
+    border: round $accent;
+    background: $surface;
+}
+
+.dialog--wide {
+    width: 60;
+}
+
+.dialog Label {
+    width: 1fr;
+    padding-bottom: 1;
+}
+
+.dialog .dialog-title {
+    padding-bottom: 0;
+}
+
+.dialog .field-label {
+    padding: 1 0 0 0;
+    color: $text-muted;
+}
+
+.dialog Input, .dialog Select {
+    width: 1fr;
+}
+
+.dialog OptionList {
+    height: auto;
+    max-height: 12;
+    border: none;
+    background: $boost;
+}
+
+.dialog-help {
+    padding-top: 1;
+}
+
+.error {
+    height: auto;
+    color: $error;
+}
+
+.buttons {
+    height: auto;
+    padding-top: 1;
+    align-horizontal: right;
+}
+
+.buttons Button {
+    margin-left: 1;
+}
+
+CellEditScreen, PickScreen, ColumnScreen, ConfirmScreen, HelpScreen {
+    align: center middle;
+    background: $background 60%;
+}
