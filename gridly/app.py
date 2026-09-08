@@ -30,6 +30,9 @@ from .store import Column, Row, Sheet
 
 DEFAULT_FILE = "sheet.gridly"
 
+# What a first run opens with, before anyone has pressed t.
+DEFAULT_THEME = "rose-pine"
+
 
 class GridlyApp(App[None]):
     CSS_PATH = "app.tcss"
@@ -80,8 +83,7 @@ class GridlyApp(App[None]):
 
     def on_mount(self) -> None:
         saved = config.load().get("theme")
-        if saved in self.available_themes:
-            self.theme = saved
+        self.theme = saved if saved in self.available_themes else DEFAULT_THEME
         self._theme_loaded = True
         table = self.query_one("#grid", DataTable)
         table.show_row_labels = True

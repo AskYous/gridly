@@ -66,8 +66,9 @@ where it can't, telling you how many it dropped.
 
 ## Themes
 
-`t` (or `ctrl+p` → "theme") opens Textual's theme search. Whatever you pick is
-written to `~/.config/gridly/config.json` and applied on the next launch. A
+A fresh install opens in `rose-pine`. `t` (or `ctrl+p` → "theme") opens
+Textual's theme search; whatever you pick is written to
+`~/.config/gridly/config.json` and applied on the next launch. A
 config naming a theme that no longer exists, or one that won't parse, falls
 back to the default rather than failing to start.
 
