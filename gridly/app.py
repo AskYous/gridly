@@ -33,6 +33,11 @@ DEFAULT_FILE = "sheet.gridly"
 # What a first run opens with, before anyone has pressed t.
 DEFAULT_THEME = "rose-pine"
 
+# How many lines a row gets on screen. Both are odd heights, so a single-line
+# value has as many blank lines above it as below.
+ROW_SIZES = {"small": 1, "large": 3}
+DEFAULT_ROW_SIZE = "small"
+
 
 class GridlyApp(App[None]):
     CSS_PATH = "app.tcss"
@@ -46,6 +51,7 @@ class GridlyApp(App[None]):
         Binding("space", "edit_cell", "Edit"),
         Binding("f", "edit_row", "Form"),
         Binding("v", "flip", "Flip"),
+        Binding("s", "toggle_row_size", "Size"),
         Binding("y", "copy_cell", "Copy"),
         Binding("Y", "copy_row", "Copy row", show=False),
         Binding("E", "export", "Export"),
@@ -72,6 +78,9 @@ class GridlyApp(App[None]):
         # Draw records down the screen (normal) or across it (flipped). This is
         # only ever a way of looking at the sheet — the data is the same either way.
         self.flipped = False
+        # How many lines each row is given. Also only a way of looking at the
+        # sheet, but a taller row has room to show more of a multi-line value.
+        self.row_size = DEFAULT_ROW_SIZE
 
     # ------------------------------------------------------------------ setup
 
@@ -82,9 +91,12 @@ class GridlyApp(App[None]):
         yield Footer()
 
     def on_mount(self) -> None:
-        saved = config.load().get("theme")
-        self.theme = saved if saved in self.available_themes else DEFAULT_THEME
+        saved = config.load()
+        theme = saved.get("theme")
+        self.theme = theme if theme in self.available_themes else DEFAULT_THEME
         self._theme_loaded = True
+        if saved.get("row_size") in ROW_SIZES:
+            self.row_size = saved["row_size"]
         table = self.query_one("#grid", DataTable)
         table.show_row_labels = True
         table.focus()
@@ -120,24 +132,35 @@ class GridlyApp(App[None]):
 
         self._columns = self.sheet.columns()
         self._rows = self.sheet.rows()
+        height = ROW_SIZES[self.row_size]
 
         if self.flipped:
             for number, row in enumerate(self._rows, start=1):
                 table.add_column(Text(str(number), "dim"), key=str(row.id))
             for column in self._columns:
                 cells = [
-                    _render(column, row.values.get(column.id)) for row in self._rows
+                    self._cell(column, row.values.get(column.id)) for row in self._rows
                 ]
-                table.add_row(*cells, key=str(column.id), label=_field_label(column))
+                table.add_row(
+                    *cells,
+                    height=height,
+                    key=str(column.id),
+                    label=_centred(_field_label(column), height),
+                )
         else:
             for column in self._columns:
                 table.add_column(_field_label(column), key=str(column.id))
             for number, row in enumerate(self._rows, start=1):
                 cells = [
-                    _render(column, row.values.get(column.id))
+                    self._cell(column, row.values.get(column.id))
                     for column in self._columns
                 ]
-                table.add_row(*cells, key=str(row.id), label=Text(str(number), "dim"))
+                table.add_row(
+                    *cells,
+                    height=height,
+                    key=str(row.id),
+                    label=_centred(Text(str(number), "dim"), height),
+                )
 
         if self._rows and self._columns:
             record, field = self._indices(previous)
@@ -145,6 +168,11 @@ class GridlyApp(App[None]):
                 min(record, len(self._rows) - 1), min(field, len(self._columns) - 1)
             )
         self._update_status()
+
+    def _cell(self, column: Column, value: Any) -> Text:
+        """A value drawn for the row height that is in force."""
+        height = ROW_SIZES[self.row_size]
+        return _centred(_render(column, value, height), height)
 
     def _update_status(self) -> None:
         columns, rows = self.sheet.counts()
@@ -181,6 +209,14 @@ class GridlyApp(App[None]):
         self.notify(
             "Records run across the screen." if self.flipped else "Back to normal."
         )
+
+    def action_toggle_row_size(self) -> None:
+        """Swap the row height for the other one."""
+        sizes = list(ROW_SIZES)
+        self.row_size = sizes[(sizes.index(self.row_size) + 1) % len(sizes)]
+        config.save(row_size=self.row_size)
+        self.reload()
+        self.notify(f"Rows are {self.row_size} now.")
 
     @on(DataTable.CellHighlighted)
     def cell_highlighted(self) -> None:
@@ -223,7 +259,9 @@ class GridlyApp(App[None]):
     def _write(self, row: Row, column: Column, value: Any) -> None:
         self.sheet.set_cell(row.id, column.id, value)
         row.values[column.id] = value
-        self.table.update_cell_at(self.table.cursor_coordinate, _render(column, value))
+        self.table.update_cell_at(
+            self.table.cursor_coordinate, self._cell(column, value)
+        )
         self._update_status()
 
     def action_edit_row(self) -> None:
@@ -525,17 +563,33 @@ def _short_path(path: Path) -> str:
         return str(path)
 
 
-def _one_line(text: str) -> Text:
-    """Squeeze a value onto the one line a grid row has, marking where it breaks."""
+def _fit(text: str, lines: int) -> Text:
+    """Lay a value out over the lines its row has.
+
+    Whatever is left over is squeezed onto the last of them, every break it
+    swallows marked with a dim ⏎, so even a one-line row shows the whole value.
+    """
     parts = text.replace("\t", " ").split("\n")
-    line = Text(parts[0])
-    for part in parts[1:]:
-        line.append(" ⏎ ", "dim")
-        line.append(part)
-    return line
+    head, tail = parts[: lines - 1], parts[lines - 1 :]
+    fitted = Text("\n".join(head))
+    if not tail:
+        return fitted
+    if head:
+        fitted.append("\n")
+    fitted.append(tail[0])
+    for part in tail[1:]:
+        fitted.append(" ⏎ ", "dim")
+        fitted.append(part)
+    return fitted
 
 
-def _render(column: Column, value: Any) -> Text:
+def _centred(cell: Text, height: int) -> Text:
+    """Sit a value in the middle of its row rather than at the top of it."""
+    above = (height - cell.plain.count("\n") - 1) // 2
+    return Text("\n" * above) + cell if above > 0 else cell
+
+
+def _render(column: Column, value: Any, lines: int) -> Text:
     """How a value looks inside the grid."""
     if value is None:
         return Text("·", "dim")
@@ -547,7 +601,7 @@ def _render(column: Column, value: Any) -> Text:
         return Text(display(column.type, value), "magenta")
     if column.type is ColumnType.SELECT:
         return Text(display(column.type, value), "yellow")
-    return _one_line(display(column.type, value))
+    return _fit(display(column.type, value), lines)
 
 
 def main(argv: list[str] | None = None) -> int:

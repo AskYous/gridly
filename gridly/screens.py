@@ -357,6 +357,7 @@ class HelpScreen(ModalScreen[None]):
         ("x", "Delete the current column"),
         ("[ / ]", "Move the current column left / right"),
         ("v", "Flip the view: records across instead of down"),
+        ("s", "Row size: small or large"),
         ("y", "Copy this cell to the clipboard"),
         ("Y", "Copy the whole row, tab separated"),
         ("E", "Export the sheet to a CSV file"),

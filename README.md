@@ -48,6 +48,7 @@ where it can't, telling you how many it dropped.
 | `space`     | same as `enter`                               |
 | `f`         | open the whole row as a form                  |
 | `v`         | flip the view: records across, not down       |
+| `s`         | row size: small or large                      |
 | `backspace` | clear the cell                                |
 | `a`         | add a row at the bottom                       |
 | `i`         | insert a row below the cursor                 |
@@ -77,9 +78,10 @@ Gridly paints its own colours rather than borrowing your terminal's — pick
 
 ## Multi-line text
 
-A text column holds newlines. Since a grid row is one line tall, the grid
-collapses them onto that line and marks each break with a dim `⏎` — the value
-itself is untouched. Open the cell with `enter`, or the row with `f`, and you
+A text column holds newlines. A row shows as many of them as its height allows
+and squeezes the rest onto its last line, marking each break it swallows with a
+dim `⏎` — so a small row still shows the whole value, and the value itself is
+untouched either way. Open the cell with `enter`, or the row with `f`, and you
 get a real text box with the lines laid out properly: `enter` starts a new
 line, `ctrl+s` saves, `esc` throws the edit away. Number and date columns keep
 their one-line input, where `enter` still saves.
@@ -117,6 +119,16 @@ down the screen — so a block copied from the flipped view pastes back exactly
 as it looked. The one asymmetry is inherent: records are the axis that can
 grow, so pasting past the last record adds records, while a block that runs
 past the last column is still clipped rather than inventing columns.
+
+## Row size
+
+`s` swaps between two row heights, small and large. Like flipping, it only
+changes the drawing: nothing is written to the sheet, and the height is
+remembered in the config so the next launch opens the way you left it.
+
+Small is one line per row, which is the tightest the grid goes. Large is three,
+which gives a multi-line text value room to show its later lines instead of
+folding them onto the first, and sits every value in the middle of its row.
 
 ## Copying out
 
