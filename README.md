@@ -3,12 +3,26 @@
 A terminal spreadsheet with typed columns. Every change is written straight to a
 SQLite file — there is no save step and nothing to lose on a crash.
 
+## Install
+
+```sh
+python3 -m venv .venv
+.venv/bin/pip install -e .
+ln -sf "$PWD/.venv/bin/gridly" ~/.local/bin/gridly   # or any dir on your PATH
+```
+
+The console script has the venv's python baked into its shebang, so the symlink
+works from anywhere without activating anything. It points back at this
+checkout, so keep the folder where it is.
+
 ## Run
 
 ```sh
-./gridly.sh              # opens ./sheet.gridly, creating it if needed
-./gridly.sh budget.gridly
+gridly                   # opens ./sheet.gridly in the current directory
+gridly ~/budget.gridly
 ```
+
+`gridly.sh` in this folder does the same thing without installing anything.
 
 ## Column types
 
@@ -83,10 +97,3 @@ offending field focused.
 One SQLite database per sheet: `columns` (name, type, options, position),
 `rows` (position), and `cells` (row_id, column_id, value). Open it with any
 SQLite tool.
-
-## Install
-
-```sh
-python3 -m venv .venv && .venv/bin/pip install -e .
-.venv/bin/gridly
-```
