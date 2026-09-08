@@ -60,12 +60,11 @@ Screen {
     color: $text-muted;
 }
 
-.form Input, .form Select {
+.form Input, .form Select, .form TextArea {
     width: 1fr;
 }
 
 .form TextArea {
-    width: 1fr;
     height: 5;
 }
 
@@ -83,12 +82,11 @@ Screen {
     color: $text-muted;
 }
 
-.dialog Input, .dialog Select {
+.dialog Input, .dialog Select, .dialog TextArea {
     width: 1fr;
 }
 
 .dialog TextArea {
-    width: 1fr;
     height: 8;
 }
 
@@ -121,4 +119,23 @@ Screen {
 CellEditScreen, PickScreen, ColumnScreen, ConfirmScreen, HelpScreen, RowFormScreen {
     align: center middle;
     background: $background 60%;
+}
+
+/* Field boxes.
+   Textual's default "tall" border draws its top and bottom rules one cell in
+   from the widget's left edge — the corner column holds a vertical block
+   instead — so every field reads as indented against the label above it. A
+   round border puts a real corner on that column, flush with the label. The
+   padding is set here too because Input and Select default to two cells and
+   TextArea to one, which left the three kinds of field starting their text at
+   three different columns. */
+.dialog Input, .dialog TextArea, .dialog SelectCurrent,
+.form Input, .form TextArea, .form SelectCurrent {
+    border: round $border-blurred;
+    padding: 0 1;
+}
+
+.dialog Input:focus, .dialog TextArea:focus, .dialog Select:focus SelectCurrent,
+.form Input:focus, .form TextArea:focus, .form Select:focus SelectCurrent {
+    border: round $border;
 }
