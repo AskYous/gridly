@@ -50,6 +50,11 @@ class GridlyApp(App[None]):
     BINDINGS = [
         Binding("space", "edit_cell", "Edit"),
         Binding("f", "edit_row", "Form"),
+        Binding("shift+right", "extend(0, 1)", "Select", key_display="shift+→"),
+        Binding("shift+left", "extend(0, -1)", "Select left", show=False),
+        Binding("shift+up", "extend(-1, 0)", "Select up", show=False),
+        Binding("shift+down", "extend(1, 0)", "Select down", show=False),
+        Binding("escape", "clear_selection", "Drop selection", show=False),
         Binding("v", "flip", "Flip"),
         Binding("s", "toggle_row_size", "Size"),
         Binding("y", "copy_cell", "Copy"),
@@ -78,6 +83,13 @@ class GridlyApp(App[None]):
         # Draw records down the screen (normal) or across it (flipped). This is
         # only ever a way of looking at the sheet — the data is the same either way.
         self.flipped = False
+        # A keyboard selection: where it started and which cells it covers now.
+        # Cursor moves we made ourselves are counted, because the CellHighlighted
+        # they raise arrives later — anything left over is the user moving away,
+        # which drops the selection.
+        self._anchor: Coordinate | None = None
+        self._selected: set[Coordinate] = set()
+        self._extending = 0
         # How many lines each row is given. Also only a way of looking at the
         # sheet, but a taller row has room to show more of a multi-line value.
         self.row_size = DEFAULT_ROW_SIZE
@@ -128,6 +140,8 @@ class GridlyApp(App[None]):
         """Redraw the whole grid from the database."""
         table = self.table
         previous = cursor or table.cursor_coordinate
+        self._anchor = None
+        self._selected = set()
         table.clear(columns=True)
 
         self._columns = self.sheet.columns()
@@ -181,8 +195,15 @@ class GridlyApp(App[None]):
         if self.flipped:
             shape += ", flipped"
         detail = ""
+        region = self._selection_region()
+        if region is not None:
+            start, end = region
+            detail += (
+                f"  ·  {end.row - start.row + 1} × {end.column - start.column + 1}"
+                " selected"
+            )
         if column is not None:
-            detail = f"  ·  {column.name}: {column.type.label}"
+            detail += f"  ·  {column.name}: {column.type.label}"
             if column.type is ColumnType.SELECT:
                 detail += f" ({', '.join(column.options) or 'no options'})"
         self.query_one("#status", Static).update(
@@ -200,6 +221,80 @@ class GridlyApp(App[None]):
     def current_row(self) -> Row | None:
         record, _ = self._indices()
         return self._rows[record] if 0 <= record < len(self._rows) else None
+
+    def _cell_at(self, coordinate: Coordinate) -> tuple[Row | None, Column | None]:
+        record, field = self._indices(coordinate)
+        row = self._rows[record] if 0 <= record < len(self._rows) else None
+        column = self._columns[field] if 0 <= field < len(self._columns) else None
+        return row, column
+
+    # ------------------------------------------------------------- selection
+
+    def _selection_region(self) -> tuple[Coordinate, Coordinate] | None:
+        """The corners of the selected block, or None when it is a single cell."""
+        if self._anchor is None:
+            return None
+        at = self.table.cursor_coordinate
+        top, bottom = sorted((self._anchor.row, at.row))
+        left, right = sorted((self._anchor.column, at.column))
+        if (top, left) == (bottom, right):
+            return None
+        return Coordinate(top, left), Coordinate(bottom, right)
+
+    def _selected_cells(self) -> set[Coordinate]:
+        region = self._selection_region()
+        if region is None:
+            return set()
+        start, end = region
+        return {
+            Coordinate(row, column)
+            for row in range(start.row, end.row + 1)
+            for column in range(start.column, end.column + 1)
+        }
+
+    def _refresh_selection(self) -> None:
+        wanted = self._selected_cells()
+        for coordinate in self._selected ^ wanted:  # only what changed
+            self._repaint(coordinate, coordinate in wanted)
+        self._selected = wanted
+        self._update_status()
+
+    def _repaint(self, coordinate: Coordinate, selected: bool) -> None:
+        row, column = self._cell_at(coordinate)
+        if row is None or column is None:
+            return
+        text = self._cell(column, row.values.get(column.id))
+        if selected:
+            text = text.copy()
+            text.stylize(f"on {self.theme_variables.get('primary-darken-2', 'blue')}")
+        self.table.update_cell_at(coordinate, text)
+
+    def action_extend(self, down: int, across: int) -> None:
+        """Grow the selection with shift+arrows, anchored where it started."""
+        table = self.table
+        if not table.rows or not table.columns:
+            return
+        before = table.cursor_coordinate
+        if self._anchor is None:
+            self._anchor = before
+        target = Coordinate(
+            max(0, min(before.row + down, len(table.rows) - 1)),
+            max(0, min(before.column + across, len(table.columns) - 1)),
+        )
+        if target != before:
+            self._extending += 1
+            table.cursor_coordinate = target
+        self._refresh_selection()
+
+    def action_clear_selection(self) -> None:
+        self._clear_selection()
+
+    def _clear_selection(self) -> None:
+        self._anchor = None
+        self._extending = 0
+        for coordinate in self._selected:
+            self._repaint(coordinate, False)
+        self._selected = set()
 
     def action_flip(self) -> None:
         """Swap which way the sheet is drawn, keeping the cursor on the same cell."""
@@ -220,6 +315,10 @@ class GridlyApp(App[None]):
 
     @on(DataTable.CellHighlighted)
     def cell_highlighted(self) -> None:
+        if self._extending:
+            self._extending -= 1
+        else:
+            self._clear_selection()
         self._update_status()
 
     # ----------------------------------------------------------- cell editing
@@ -291,12 +390,31 @@ class GridlyApp(App[None]):
     # ------------------------------------------------------------------ copy
 
     def action_copy_cell(self) -> None:
-        """Put the cell's own text on the clipboard, unquoted."""
+        """Copy the selected block, or just the cell when nothing is selected."""
+        region = self._selection_region()
+        if region is not None:
+            start, end = region
+            block = [
+                [self._text_at(Coordinate(row, column))
+                 for column in range(start.column, end.column + 1)]
+                for row in range(start.row, end.row + 1)
+            ]
+            down = end.row - start.row + 1
+            across = end.column - start.column + 1
+            self._copy(format_block(block), f"{down} × {across} cells")
+            return
+
         column, row = self.current_column(), self.current_row()
         if column is None or row is None:
             return
         value = row.values.get(column.id)
         self._copy(display(column.type, value), f"{column.name} cell")
+
+    def _text_at(self, coordinate: Coordinate) -> str:
+        row, column = self._cell_at(coordinate)
+        if row is None or column is None:
+            return ""
+        return display(column.type, row.values.get(column.id))
 
     def action_copy_row(self) -> None:
         """Put the whole row on the clipboard as a spreadsheet would write it."""

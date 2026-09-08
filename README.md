@@ -59,7 +59,9 @@ where it can't, telling you how many it dropped.
 | `e`         | edit the current column (name, type, options) |
 | `x`         | delete the current column                     |
 | `[` / `]`   | move the current column left / right          |
-| `y`         | copy this cell to the clipboard               |
+| shift+arrows| select a block of cells                       |
+| `esc`       | drop the selection                            |
+| `y`         | copy the selection, or just this cell         |
 | `Y`         | copy the whole row, tab separated             |
 | `E`         | export the sheet to a CSV file                |
 | `cmd/ctrl+v`| paste cells copied from a spreadsheet         |
@@ -134,7 +136,12 @@ folding them onto the first, and sits every value in the middle of its row.
 
 ## Copying out
 
-`y` copies the cell under the cursor as plain text — the value itself, so it
+Hold shift and use the arrows to grow a block out from the cursor; the cells
+highlight and the status line counts them. Any plain cursor move or `esc`
+drops it. With a block selected `y` copies the whole thing, tab separated, so
+it lands in Sheets as cells and pastes back into Gridly unchanged.
+
+With nothing selected, `y` copies the cell under the cursor as plain text — the value itself, so it
 lands in another app exactly as it reads on screen. `Y` copies the whole row
 tab separated and quoted the way a spreadsheet writes it, so it pastes into
 Sheets as a row of cells and back into Gridly unchanged.
