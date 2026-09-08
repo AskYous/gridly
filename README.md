@@ -88,9 +88,10 @@ same notification.
 
 Grid editing gets cramped once a sheet has more than a handful of columns.
 `f` opens the row under the cursor as a form — one labelled field per column,
-`tab` between them, `ctrl+s` or `enter` to save, `esc` to throw the edits away.
-Nothing is written until you save, and a bad value keeps the form open with the
-offending field focused.
+`tab` between them, `ctrl+s` to save, `esc` to throw the edits away. (`enter`
+saves too, except in a text field, where it starts a new line.) Nothing is
+written until you save, and a bad value keeps the form open with the offending
+field focused.
 
 ## File format
 
