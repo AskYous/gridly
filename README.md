@@ -58,6 +58,7 @@ where it can't, telling you how many it dropped.
 | `[` / `]`   | move the current column left / right          |
 | `y`         | copy this cell to the clipboard               |
 | `Y`         | copy the whole row, tab separated             |
+| `E`         | export the sheet to a CSV file                |
 | `cmd/ctrl+v`| paste cells copied from a spreadsheet         |
 | `t`         | change the colour theme                       |
 | `?`         | help                                          |
@@ -81,6 +82,21 @@ itself is untouched. Open the cell with `enter`, or the row with `f`, and you
 get a real text box with the lines laid out properly: `enter` starts a new
 line, `ctrl+s` saves, `esc` throws the edit away. Number and date columns keep
 their one-line input, where `enter` still saves.
+
+## Exporting to CSV
+
+`E` writes the whole sheet out as a CSV: a header row of column names, then one
+line per record, with values exactly as the grid shows them — `yes`/`no` for a
+boolean, `2026-09-08` for a date. It suggests the sheet's own name with a `.csv`
+suffix, and asks before overwriting a file that is already there.
+
+The file is UTF-8 with a byte order mark, which is what Excel needs to read
+non-ASCII text without garbling it and which Sheets, pandas and everything else
+accept happily.
+
+Unlike copying, export ignores the flipped view. The clipboard is for grabbing
+what you can see; a CSV is data going to another tool, and every one of those
+tools expects a header row with records underneath.
 
 ## Flipping the view
 

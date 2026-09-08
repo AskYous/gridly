@@ -19,11 +19,13 @@ from .screens import (
     CellEditScreen,
     ColumnScreen,
     ConfirmScreen,
+    ExportScreen,
     HelpScreen,
     PickScreen,
     RowFormScreen,
 )
 from .clipboard import format_block, parse_block, to_system_clipboard
+from .csvfile import write_csv
 from .store import Column, Row, Sheet
 
 DEFAULT_FILE = "sheet.gridly"
@@ -43,6 +45,7 @@ class GridlyApp(App[None]):
         Binding("v", "flip", "Flip"),
         Binding("y", "copy_cell", "Copy"),
         Binding("Y", "copy_row", "Copy row", show=False),
+        Binding("E", "export", "Export"),
         Binding("backspace", "clear_cell", "Clear"),
         Binding("a", "add_row", "+Row"),
         Binding("i", "insert_row", "Insert row", show=False),
@@ -273,6 +276,39 @@ class GridlyApp(App[None]):
             self.notify(f"Copied {what}.")
         else:
             self.notify(f"Nothing to copy — {what} is empty.", severity="warning")
+
+    # ---------------------------------------------------------------- export
+
+    def action_export(self) -> None:
+        """Write the sheet out as a CSV, whichever way it happens to be drawn."""
+        if not self._columns:
+            self.notify("Nothing to export yet.", severity="warning")
+            return
+
+        def chosen(path: str | None) -> None:
+            if path is None:
+                return
+            target = Path(path).expanduser()
+            if target.exists():
+                self.push_screen(
+                    ConfirmScreen(f"{target.name} already exists. Overwrite it?", confirm="Overwrite"),
+                    lambda confirmed: self._export(target) if confirmed else None,
+                )
+            else:
+                self._export(target)
+
+        self.push_screen(ExportScreen(str(self.sheet.path.with_suffix(".csv"))), chosen)
+
+    def _export(self, target: Path) -> None:
+        try:
+            written = write_csv(target, self._columns, self._rows)
+        except OSError as error:
+            self.notify(f"Could not write it: {error}", severity="error")
+            return
+        rows = len(self._rows)
+        self.notify(
+            f"Exported {rows} {_plural(rows, 'row')} to {_short_path(written)}."
+        )
 
     # ----------------------------------------------------------------- paste
 

@@ -273,6 +273,40 @@ class ColumnScreen(ModalScreen[tuple[str, ColumnType, list[str]] | None]):
         self.dismiss(None)
 
 
+class ExportScreen(ModalScreen[str | None]):
+    """Ask where to write the CSV."""
+
+    BINDINGS = [Binding("escape", "cancel", "Cancel", show=False)]
+
+    def __init__(self, suggestion: str) -> None:
+        super().__init__()
+        self.suggestion = suggestion
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog dialog--wide"):
+            yield Label("Export to CSV")
+            yield Label("File", classes="field-label")
+            yield Input(value=self.suggestion, id="path")
+            yield Static("", id="error", classes="error")
+            yield Static("[dim]enter write · esc cancel[/]", classes="dialog-help")
+
+    def on_mount(self) -> None:
+        path_input = self.query_one("#path", Input)
+        path_input.focus()
+        path_input.cursor_position = len(path_input.value)
+
+    @on(Input.Submitted)
+    def save(self) -> None:
+        path = self.query_one("#path", Input).value.strip()
+        if not path:
+            self.query_one("#error", Static).update("[red]Give the file a name[/]")
+            return
+        self.dismiss(path)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
 class ConfirmScreen(ModalScreen[bool]):
     """Yes/no prompt."""
 
@@ -325,6 +359,7 @@ class HelpScreen(ModalScreen[None]):
         ("v", "Flip the view: records across instead of down"),
         ("y", "Copy this cell to the clipboard"),
         ("Y", "Copy the whole row, tab separated"),
+        ("E", "Export the sheet to a CSV file"),
         ("cmd/ctrl+v", "Paste cells copied from a spreadsheet"),
         ("t", "Change the colour theme"),
         ("?", "This help"),
