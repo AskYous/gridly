@@ -47,6 +47,7 @@ where it can't, telling you how many it dropped.
 | `ctrl+s`    | save a text cell (`enter` adds a line there)  |
 | `space`     | same as `enter`                               |
 | `f`         | open the whole row as a form                  |
+| `v`         | flip the view: records across, not down       |
 | `backspace` | clear the cell                                |
 | `a`         | add a row at the bottom                       |
 | `i`         | insert a row below the cursor                 |
@@ -80,6 +81,25 @@ itself is untouched. Open the cell with `enter`, or the row with `f`, and you
 get a real text box with the lines laid out properly: `enter` starts a new
 line, `ctrl+s` saves, `esc` throws the edit away. Number and date columns keep
 their one-line input, where `enter` still saves.
+
+## Flipping the view
+
+A sheet with many columns and few rows means scrolling sideways to read one
+record. `v` turns the grid on its side: column names run down the left and each
+record becomes a column. It is only a way of drawing the sheet — the file is
+untouched, `v` puts it back, and every launch starts the normal way round.
+
+Nothing else changes meaning. `d` still deletes the record under the cursor
+even though that record is now a column on screen, `c` still adds a column even
+though it appears as a new row, and the status line says `flipped` so you know
+which way you are looking.
+
+Copying and pasting follow what is on screen. Flipped, `Y` copies a record as a
+column of lines rather than one line, and a pasted block still spills right and
+down the screen — so a block copied from the flipped view pastes back exactly
+as it looked. The one asymmetry is inherent: records are the axis that can
+grow, so pasting past the last record adds records, while a block that runs
+past the last column is still clipped rather than inventing columns.
 
 ## Copying out
 
