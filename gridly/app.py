@@ -13,6 +13,7 @@ from textual.binding import Binding
 from textual.coordinate import Coordinate
 from textual.widgets import DataTable, Footer, Header, Static
 
+from . import config
 from .coltypes import ColumnType, ValidationError, display, parse
 from .screens import (
     CellEditScreen,
@@ -31,6 +32,10 @@ DEFAULT_FILE = "sheet.gridly"
 class GridlyApp(App[None]):
     CSS_PATH = "app.tcss"
     TITLE = "Gridly"
+
+    # Set once the saved theme has been read, so the watcher below doesn't
+    # write the default theme over it on the way up.
+    _theme_loaded = False
 
     BINDINGS = [
         Binding("space", "edit_cell", "Edit"),
@@ -65,10 +70,19 @@ class GridlyApp(App[None]):
         yield Footer()
 
     def on_mount(self) -> None:
+        saved = config.load().get("theme")
+        if saved in self.available_themes:
+            self.theme = saved
+        self._theme_loaded = True
         table = self.query_one("#grid", DataTable)
         table.show_row_labels = True
         table.focus()
         self.reload()
+
+    def watch_theme(self, theme: str) -> None:
+        """Remember whatever theme was picked, wherever it was picked from."""
+        if self._theme_loaded:
+            config.save(theme=theme)
 
     @property
     def table(self) -> DataTable:

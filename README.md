@@ -60,6 +60,16 @@ where it can't, telling you how many it dropped.
 | `?`         | help                                          |
 | `q`         | quit                                          |
 
+## Themes
+
+`t` (or `ctrl+p` → "theme") opens Textual's theme search. Whatever you pick is
+written to `~/.config/gridly/config.json` and applied on the next launch. A
+config naming a theme that no longer exists, or one that won't parse, falls
+back to the default rather than failing to start.
+
+Gridly paints its own colours rather than borrowing your terminal's — pick
+`ansi-dark` or `ansi-light` if you would rather it used your terminal palette.
+
 ## Multi-line text
 
 A text column holds newlines. Since a grid row is one line tall, the grid
