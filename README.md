@@ -55,6 +55,8 @@ where it can't, telling you how many it dropped.
 | `e`         | edit the current column (name, type, options) |
 | `x`         | delete the current column                     |
 | `[` / `]`   | move the current column left / right          |
+| `y`         | copy this cell to the clipboard               |
+| `Y`         | copy the whole row, tab separated             |
 | `cmd/ctrl+v`| paste cells copied from a spreadsheet         |
 | `t`         | change the colour theme                       |
 | `?`         | help                                          |
@@ -78,6 +80,18 @@ itself is untouched. Open the cell with `enter`, or the row with `f`, and you
 get a real text box with the lines laid out properly: `enter` starts a new
 line, `ctrl+s` saves, `esc` throws the edit away. Number and date columns keep
 their one-line input, where `enter` still saves.
+
+## Copying out
+
+`y` copies the cell under the cursor as plain text — the value itself, so it
+lands in another app exactly as it reads on screen. `Y` copies the whole row
+tab separated and quoted the way a spreadsheet writes it, so it pastes into
+Sheets as a row of cells and back into Gridly unchanged.
+
+Both go to the clipboard twice over: through OSC 52, which is what works when
+you are on the other end of an ssh session, and through `pbcopy` (or `wl-copy`,
+`xclip`, `xsel`) when Gridly is running on the same machine as the clipboard.
+macOS Terminal ignores OSC 52, so the second route is what makes `y` work there.
 
 ## Pasting from a spreadsheet
 

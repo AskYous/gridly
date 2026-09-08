@@ -322,6 +322,8 @@ class HelpScreen(ModalScreen[None]):
         ("e", "Edit the current column (name, type, options)"),
         ("x", "Delete the current column"),
         ("[ / ]", "Move the current column left / right"),
+        ("y", "Copy this cell to the clipboard"),
+        ("Y", "Copy the whole row, tab separated"),
         ("cmd/ctrl+v", "Paste cells copied from a spreadsheet"),
         ("t", "Change the colour theme"),
         ("?", "This help"),

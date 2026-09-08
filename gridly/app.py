@@ -23,7 +23,7 @@ from .screens import (
     PickScreen,
     RowFormScreen,
 )
-from .paste import parse_block
+from .clipboard import format_block, parse_block, to_system_clipboard
 from .store import Column, Row, Sheet
 
 DEFAULT_FILE = "sheet.gridly"
@@ -40,6 +40,8 @@ class GridlyApp(App[None]):
     BINDINGS = [
         Binding("space", "edit_cell", "Edit"),
         Binding("f", "edit_row", "Form"),
+        Binding("y", "copy_cell", "Copy"),
+        Binding("Y", "copy_row", "Copy row", show=False),
         Binding("backspace", "clear_cell", "Clear"),
         Binding("a", "add_row", "+Row"),
         Binding("i", "insert_row", "Insert row", show=False),
@@ -213,6 +215,32 @@ class GridlyApp(App[None]):
             )
 
         self.push_screen(RowFormScreen(self._columns, row, number, len(self._rows)), done)
+
+    # ------------------------------------------------------------------ copy
+
+    def action_copy_cell(self) -> None:
+        """Put the cell's own text on the clipboard, unquoted."""
+        column, row = self.current_column(), self.current_row()
+        if column is None or row is None:
+            return
+        value = row.values.get(column.id)
+        self._copy(display(column.type, value), f"{column.name} cell")
+
+    def action_copy_row(self) -> None:
+        """Put the whole row on the clipboard as a spreadsheet would write it."""
+        row = self.current_row()
+        if row is None or not self._columns:
+            return
+        line = [display(c.type, row.values.get(c.id)) for c in self._columns]
+        self._copy(format_block([line]), f"row {self._rows.index(row) + 1}")
+
+    def _copy(self, text: str, what: str) -> None:
+        self.copy_to_clipboard(text)  # OSC 52 — the one that works over ssh
+        to_system_clipboard(text)  # and pbcopy and friends, for terminals that ignore it
+        if text.strip():
+            self.notify(f"Copied {what}.")
+        else:
+            self.notify(f"Nothing to copy — {what} is empty.", severity="warning")
 
     # ----------------------------------------------------------------- paste
 
