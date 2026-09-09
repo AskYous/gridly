@@ -351,44 +351,50 @@ class HelpScreen(ModalScreen[None]):
 
     BINDINGS = [Binding("escape,question_mark,q", "close", "Close", show=False)]
 
+    # Grouped, and kept short enough to sit on one line beside the key.
     KEYS = [
-        ("arrows", "Move around the grid"),
-        ("enter", "Edit the current cell (toggles a yes/no cell)"),
-        ("ctrl+s", "Save a text cell — enter starts a new line there"),
-        ("f", "Edit the whole row as a form"),
-        ("space", "Same as enter"),
-        ("backspace", "Clear the current cell"),
-        ("a", "Add a row at the bottom"),
-        ("i", "Insert a row below the cursor"),
-        ("d", "Delete the current row"),
-        ("c", "Add a column"),
-        ("e", "Edit the current column (name, type, options)"),
-        ("x", "Delete the current column"),
-        ("[ / ]", "Move the current column left / right"),
-        ("w", "Cap columns: large, unlimited, small"),
-        ("W", "Long values wrap, or end in an ellipsis"),
-        ("v", "Flip the view: records across instead of down"),
-        ("s", "Row size: small or large"),
-        ("shift+arrows", "Select a block of cells"),
-        ("esc", "Drop the selection"),
-        ("y", "Copy the selection, or this cell"),
-        ("Y", "Copy the whole row, tab separated"),
-        ("E", "Export the sheet to a CSV file"),
-        ("cmd/ctrl+v", "Paste cells copied from a spreadsheet"),
-        ("t", "Change the colour theme"),
-        ("ctrl+p", "Command palette — every command, by name"),
-        ("?", "This help"),
-        ("q", "Quit"),
+        ("Moving and editing", [
+            ("arrows", "Move around the grid"),
+            ("enter / space", "Edit the cell, or toggle a yes/no"),
+            ("ctrl+s", "Save a text cell (enter adds a line)"),
+            ("backspace", "Clear the cell"),
+            ("f", "Edit the whole row as a form"),
+        ]),
+        ("Rows and columns", [
+            ("a / i", "Add a row at the bottom / below"),
+            ("d", "Delete the row"),
+            ("c / e / x", "Add / edit / delete a column"),
+            ("[ / ]", "Move the column left / right"),
+        ]),
+        ("Clipboard", [
+            ("shift+arrows", "Select a block of cells"),
+            ("esc", "Drop the selection"),
+            ("y / Y", "Copy the cell or block / the row"),
+            ("cmd+v", "Paste cells from a spreadsheet"),
+            ("E", "Export the sheet to CSV"),
+        ]),
+        ("How it looks", [
+            ("w / W", "Column width cap / wrap or ellipsis"),
+            ("s", "Row height: one line or three"),
+            ("v", "Flip: records across, not down"),
+            ("t", "Change the colour theme"),
+        ]),
+        ("Finding things", [
+            ("ctrl+p", "Every command, searchable by name"),
+            ("? / q", "This help / quit"),
+        ]),
     ]
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog dialog--wide"):
             yield Label("Keys")
-            for key, description in self.KEYS:
-                yield Static(f"  [b]{key:<10}[/] [dim]{description}[/]")
-            yield Static("", classes="dialog-help")
+            with VerticalScroll(classes="dialog-fields"):
+                for heading, rows in self.KEYS:
+                    yield Static(f"[b]{heading}[/]", classes="help-heading")
+                    for key, description in rows:
+                        yield Static(f"  [b]{key:<14}[/][dim]{description}[/]")
             yield Static(
-                "[dim]Every change is written to the file straight away.[/]",
+                "[dim]↑↓ scroll · esc close · every change is saved as you make it[/]",
                 classes="dialog-help",
             )
 

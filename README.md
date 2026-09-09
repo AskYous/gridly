@@ -85,6 +85,10 @@ Gridly paints its own colours rather than borrowing your terminal's — pick
 
 ## Finding things
 
+The footer keeps only the way in — edit, add a row, add a column — plus the two
+routes to everything else: `?` for the grouped key list and `ctrl+p` for the
+command palette. Every other key is one of those two away.
+
 `ctrl+p` opens the command palette. Everything the app can do is in there by
 name, with a sentence saying what it means — including the things whose keys
 are easy to miss, like moving a column left or right. A test asserts every
