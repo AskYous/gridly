@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from functools import partial
+from math import ceil
 from pathlib import Path
 from typing import Any
 
@@ -46,9 +47,13 @@ DEFAULT_ROW_SIZE = "small"
 COLUMN_WIDTHS = {"small": 16, "large": 36, "unlimited": None}
 DEFAULT_COLUMN_WIDTH = "large"
 
-# What a capped column does with a value too long for it.
+# What a capped column does with a value too long for it. Wrapping grows the
+# row to fit, so row_size only applies to the ellipsis side.
 OVERFLOWS = ("ellipsis", "wrap")
 DEFAULT_OVERFLOW = "ellipsis"
+
+# However much a wrapped row wants, it does not get to own the whole screen.
+MAX_WRAP_LINES = 12
 
 
 class GridlyApp(App[None]):
@@ -205,7 +210,6 @@ class GridlyApp(App[None]):
 
         self._columns = self.sheet.columns()
         self._rows = self.sheet.rows()
-        height = ROW_SIZES[self.row_size]
 
         if self.flipped:
             # A grid column is a record: size it from that record's own values.
@@ -216,16 +220,17 @@ class GridlyApp(App[None]):
                 ]
                 for row in self._rows
             }
+            widths = []
             for number, row in enumerate(self._rows, start=1):
                 label = Text(str(number), "dim")
-                table.add_column(
-                    label,
-                    key=str(row.id),
-                    width=self._column_width(label, drawn[row.id]),
-                )
+                width = self._column_width(label, drawn[row.id])
+                widths.append(width)
+                table.add_column(label, key=str(row.id), width=width)
             for index, column in enumerate(self._columns):
+                cells = [drawn[row.id][index] for row in self._rows]
+                height = self._row_height(cells, widths)
                 table.add_row(
-                    *(drawn[row.id][index] for row in self._rows),
+                    *cells,
                     height=height,
                     key=str(column.id),
                     label=_centred(_field_label(column), height),
@@ -237,16 +242,17 @@ class GridlyApp(App[None]):
                 ]
                 for column in self._columns
             }
+            widths = []
             for column in self._columns:
                 label = _field_label(column)
-                table.add_column(
-                    label,
-                    key=str(column.id),
-                    width=self._column_width(label, drawn[column.id]),
-                )
+                width = self._column_width(label, drawn[column.id])
+                widths.append(width)
+                table.add_column(label, key=str(column.id), width=width)
             for number, row in enumerate(self._rows, start=1):
+                cells = [drawn[column.id][number - 1] for column in self._columns]
+                height = self._row_height(cells, widths)
                 table.add_row(
-                    *(drawn[column.id][number - 1] for column in self._columns),
+                    *cells,
                     height=height,
                     key=str(row.id),
                     label=_centred(Text(str(number), "dim"), height),
@@ -259,14 +265,34 @@ class GridlyApp(App[None]):
             )
         self._update_status()
 
+    def _wrapping(self) -> bool:
+        """Wrapping needs a cap to wrap against, so both settings have to agree."""
+        return self.overflow == "wrap" and COLUMN_WIDTHS[self.column_width] is not None
+
     def _cell(self, column: Column, value: Any) -> Text:
         """A value drawn for the row height that is in force."""
+        if self._wrapping():
+            # The row will be grown to fit this, so nothing is squeezed or cut.
+            return _render(column, value, MAX_WRAP_LINES)
         height = ROW_SIZES[self.row_size]
         cell = _centred(_render(column, value, height), height)
-        if COLUMN_WIDTHS[self.column_width] is not None and self.overflow == "ellipsis":
+        if COLUMN_WIDTHS[self.column_width] is not None:
             cell.no_wrap = True
             cell.overflow = "ellipsis"
         return cell
+
+    def _row_height(self, cells: list[Text], widths: list[int | None]) -> int:
+        """How many lines a row needs once its values have wrapped."""
+        if not self._wrapping():
+            return ROW_SIZES[self.row_size]
+        needed = 1
+        for cell, width in zip(cells, widths):
+            lines = sum(
+                max(1, ceil(cell_len(line) / max(1, width or 1)))
+                for line in cell.plain.split("\n")
+            )
+            needed = max(needed, lines)
+        return min(needed, MAX_WRAP_LINES)
 
     def _column_width(self, label: Text, cells: list[Text]) -> int | None:
         """A cap, not a width: a column narrower than the cap keeps its own size."""
@@ -418,12 +444,10 @@ class GridlyApp(App[None]):
                 f"Long values {self.overflow} — but nothing is capped, so press w first.",
                 severity="warning",
             )
+        elif self.overflow == "wrap":
+            self.notify("Long values wrap, and rows grow to fit them.")
         else:
-            self.notify(
-                "Long values wrap over the row."
-                if self.overflow == "wrap"
-                else "Long values end in an ellipsis."
-            )
+            self.notify(f"Long values end in an ellipsis. Rows are {self.row_size}.")
 
     def action_toggle_row_size(self) -> None:
         """Swap the row height for the other one."""
@@ -431,7 +455,14 @@ class GridlyApp(App[None]):
         self.row_size = sizes[(sizes.index(self.row_size) + 1) % len(sizes)]
         config.save(row_size=self.row_size)
         self.reload()
-        self.notify(f"Rows are {self.row_size} now.")
+        if self._wrapping():
+            self.notify(
+                f"Rows are {self.row_size} — but wrapping is on, so they grow to fit."
+                " Press W for ellipsis.",
+                severity="warning",
+            )
+        else:
+            self.notify(f"Rows are {self.row_size} now.")
 
     @on(DataTable.CellHighlighted)
     def cell_highlighted(self) -> None:
@@ -478,9 +509,24 @@ class GridlyApp(App[None]):
     def _write(self, row: Row, column: Column, value: Any) -> None:
         self.sheet.set_cell(row.id, column.id, value)
         row.values[column.id] = value
-        self.table.update_cell_at(
-            self.table.cursor_coordinate, self._cell(column, value)
-        )
+        if self._wrapping():
+            # The value may need a different number of lines than the row has,
+            # and only a redraw can change that. Nothing structural moved, so
+            # the selection is put back afterwards.
+            anchor = self._anchor
+            self.reload()
+            if anchor is not None:
+                # Redrawing moves the cursor, and the message that raises
+                # clears the selection — so put it back behind that message.
+                def restore(anchor: Coordinate = anchor) -> None:
+                    self._anchor = anchor
+                    self._refresh_selection()
+
+                self.call_after_refresh(restore)
+        else:
+            # Repaint rather than redraw, so a selection keeps its highlight.
+            at = self.table.cursor_coordinate
+            self._repaint(at, at in self._selected)
         self._update_status()
 
     def action_edit_row(self) -> None:

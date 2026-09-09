@@ -134,8 +134,10 @@ small (16). It is a cap, not a width: a column narrower than it keeps its own
 size, so a yes/no column stays three wide however the cap is set.
 
 `W` decides what a capped column does with a value too long for it — end it in
-an ellipsis, or wrap it over the row. Wrapping needs the room, so it pairs with
-`s`, which gives rows three lines instead of one:
+an ellipsis, or wrap it. Wrapping grows each row to fit its tallest value, up
+to twelve lines, so a row of short values stays one line high and only the long
+one takes the space. `s` sets the row height for the ellipsis side, where every
+row is the same height whatever is in it:
 
 ```
  Task       Done  Note                                  Qty
