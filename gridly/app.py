@@ -7,6 +7,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
+from rich.cells import cell_len
 from rich.text import Text
 from textual import events, on
 from textual.app import App, ComposeResult, SystemCommand
@@ -40,6 +41,15 @@ DEFAULT_THEME = "rose-pine"
 ROW_SIZES = {"small": 1, "large": 3}
 DEFAULT_ROW_SIZE = "small"
 
+# How wide a column may get. These are caps, not widths: a column narrower than
+# its cap keeps its own size, so a yes/no column never gets padded out.
+COLUMN_WIDTHS = {"small": 16, "large": 36, "unlimited": None}
+DEFAULT_COLUMN_WIDTH = "large"
+
+# What a capped column does with a value too long for it.
+OVERFLOWS = ("ellipsis", "wrap")
+DEFAULT_OVERFLOW = "ellipsis"
+
 
 class GridlyApp(App[None]):
     CSS_PATH = "app.tcss"
@@ -59,6 +69,8 @@ class GridlyApp(App[None]):
         Binding("escape", "clear_selection", "Drop selection", show=False),
         Binding("v", "flip", "Flip"),
         Binding("s", "toggle_row_size", "Size"),
+        Binding("w", "cycle_column_width", "Width"),
+        Binding("W", "toggle_overflow", "Wrap", show=False),
         Binding("y", "copy_cell", "Copy"),
         Binding("Y", "copy_row", "Copy row", show=False),
         Binding("E", "export", "Export"),
@@ -96,6 +108,8 @@ class GridlyApp(App[None]):
         ("export", "Export to CSV", "Write the sheet out as a file", True),
         ("flip", "Flip the view", "Draw records across the screen instead of down", True),
         ("toggle_row_size", "Toggle row height", "Between one line and three", True),
+        ("cycle_column_width", "Cycle column width", "Cap columns small, large, or not at all", True),
+        ("toggle_overflow", "Toggle wrapping", "A long value wraps over the row, or ends in an ellipsis", True),
         ("help", "Show Gridly's keys", "The keyboard reference", True),
         ("extend(0, 1)", "Select one cell right", "Grow the selection", False),
         ("extend(0, -1)", "Select one cell left", "Grow the selection", False),
@@ -132,6 +146,8 @@ class GridlyApp(App[None]):
         # How many lines each row is given. Also only a way of looking at the
         # sheet, but a taller row has room to show more of a multi-line value.
         self.row_size = DEFAULT_ROW_SIZE
+        self.column_width = DEFAULT_COLUMN_WIDTH
+        self.overflow = DEFAULT_OVERFLOW
 
     # ------------------------------------------------------------------ setup
 
@@ -148,6 +164,10 @@ class GridlyApp(App[None]):
         self._theme_loaded = True
         if saved.get("row_size") in ROW_SIZES:
             self.row_size = saved["row_size"]
+        if saved.get("column_width") in COLUMN_WIDTHS:
+            self.column_width = saved["column_width"]
+        if saved.get("overflow") in OVERFLOWS:
+            self.overflow = saved["overflow"]
         table = self.query_one("#grid", DataTable)
         table.show_row_labels = True
         table.focus()
@@ -188,28 +208,45 @@ class GridlyApp(App[None]):
         height = ROW_SIZES[self.row_size]
 
         if self.flipped:
-            for number, row in enumerate(self._rows, start=1):
-                table.add_column(Text(str(number), "dim"), key=str(row.id))
-            for column in self._columns:
-                cells = [
-                    self._cell(column, row.values.get(column.id)) for row in self._rows
+            # A grid column is a record: size it from that record's own values.
+            drawn = {
+                row.id: [
+                    self._cell(column, row.values.get(column.id))
+                    for column in self._columns
                 ]
+                for row in self._rows
+            }
+            for number, row in enumerate(self._rows, start=1):
+                label = Text(str(number), "dim")
+                table.add_column(
+                    label,
+                    key=str(row.id),
+                    width=self._column_width(label, drawn[row.id]),
+                )
+            for index, column in enumerate(self._columns):
                 table.add_row(
-                    *cells,
+                    *(drawn[row.id][index] for row in self._rows),
                     height=height,
                     key=str(column.id),
                     label=_centred(_field_label(column), height),
                 )
         else:
-            for column in self._columns:
-                table.add_column(_field_label(column), key=str(column.id))
-            for number, row in enumerate(self._rows, start=1):
-                cells = [
-                    self._cell(column, row.values.get(column.id))
-                    for column in self._columns
+            drawn = {
+                column.id: [
+                    self._cell(column, row.values.get(column.id)) for row in self._rows
                 ]
+                for column in self._columns
+            }
+            for column in self._columns:
+                label = _field_label(column)
+                table.add_column(
+                    label,
+                    key=str(column.id),
+                    width=self._column_width(label, drawn[column.id]),
+                )
+            for number, row in enumerate(self._rows, start=1):
                 table.add_row(
-                    *cells,
+                    *(drawn[column.id][number - 1] for column in self._columns),
                     height=height,
                     key=str(row.id),
                     label=_centred(Text(str(number), "dim"), height),
@@ -225,7 +262,19 @@ class GridlyApp(App[None]):
     def _cell(self, column: Column, value: Any) -> Text:
         """A value drawn for the row height that is in force."""
         height = ROW_SIZES[self.row_size]
-        return _centred(_render(column, value, height), height)
+        cell = _centred(_render(column, value, height), height)
+        if COLUMN_WIDTHS[self.column_width] is not None and self.overflow == "ellipsis":
+            cell.no_wrap = True
+            cell.overflow = "ellipsis"
+        return cell
+
+    def _column_width(self, label: Text, cells: list[Text]) -> int | None:
+        """A cap, not a width: a column narrower than the cap keeps its own size."""
+        cap = COLUMN_WIDTHS[self.column_width]
+        if cap is None:
+            return None
+        natural = max([_widest(label)] + [_widest(cell) for cell in cells])
+        return max(1, min(natural, cap))
 
     def _update_status(self) -> None:
         columns, rows = self.sheet.counts()
@@ -343,6 +392,38 @@ class GridlyApp(App[None]):
         self.notify(
             "Records run across the screen." if self.flipped else "Back to normal."
         )
+
+    def action_cycle_column_width(self) -> None:
+        """Small, large, or let columns take whatever they need."""
+        widths = list(COLUMN_WIDTHS)
+        self.column_width = widths[
+            (widths.index(self.column_width) + 1) % len(widths)
+        ]
+        config.save(column_width=self.column_width)
+        self.reload()
+        cap = COLUMN_WIDTHS[self.column_width]
+        self.notify(
+            "Columns take the width they need."
+            if cap is None
+            else f"Columns stop at {cap} characters ({self.column_width})."
+        )
+
+    def action_toggle_overflow(self) -> None:
+        """Wrap a too-long value over the row, or cut it with an ellipsis."""
+        self.overflow = OVERFLOWS[(OVERFLOWS.index(self.overflow) + 1) % len(OVERFLOWS)]
+        config.save(overflow=self.overflow)
+        self.reload()
+        if COLUMN_WIDTHS[self.column_width] is None:
+            self.notify(
+                f"Long values {self.overflow} — but nothing is capped, so press w first.",
+                severity="warning",
+            )
+        else:
+            self.notify(
+                "Long values wrap over the row."
+                if self.overflow == "wrap"
+                else "Long values end in an ellipsis."
+            )
 
     def action_toggle_row_size(self) -> None:
         """Swap the row height for the other one."""
@@ -711,6 +792,11 @@ class GridlyApp(App[None]):
 
 def _field_label(column: Column) -> Text:
     return Text.assemble((column.name, "bold"), (f"  {column.type.tag}", "dim"))
+
+
+def _widest(text: Text) -> int:
+    """How many columns the longest line of a value needs."""
+    return max((cell_len(line) for line in text.plain.split("\n")), default=0)
 
 
 def _plural(count: int, word: str) -> str:

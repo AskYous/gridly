@@ -365,6 +365,8 @@ class HelpScreen(ModalScreen[None]):
         ("e", "Edit the current column (name, type, options)"),
         ("x", "Delete the current column"),
         ("[ / ]", "Move the current column left / right"),
+        ("w", "Cap columns: large, unlimited, small"),
+        ("W", "Long values wrap, or end in an ellipsis"),
         ("v", "Flip the view: records across instead of down"),
         ("s", "Row size: small or large"),
         ("shift+arrows", "Select a block of cells"),

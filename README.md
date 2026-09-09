@@ -49,6 +49,8 @@ where it can't, telling you how many it dropped.
 | `ctrl+s`    | save a text cell (`enter` adds a line there)  |
 | `space`     | same as `enter`                               |
 | `f`         | open the whole row as a form                  |
+| `w`         | cap column width: large, unlimited, small     |
+| `W`         | long values wrap, or end in an ellipsis       |
 | `v`         | flip the view: records across, not down       |
 | `s`         | row size: small or large                      |
 | `backspace` | clear the cell                                |
@@ -119,6 +121,26 @@ accept happily.
 Unlike copying, export ignores the flipped view. The clipboard is for grabbing
 what you can see; a CSV is data going to another tool, and every one of those
 tools expects a header row with records underneath.
+
+## Column width
+
+One long value used to stretch its column across the screen and push the rest
+out of sight. `w` cycles the cap between large (36 characters), unlimited, and
+small (16). It is a cap, not a width: a column narrower than it keeps its own
+size, so a yes/no column stays three wide however the cap is set.
+
+`W` decides what a capped column does with a value too long for it — end it in
+an ellipsis, or wrap it over the row. Wrapping needs the room, so it pairs with
+`s`, which gives rows three lines instead of one:
+
+```
+ Task       Done  Note                                  Qty
+ Ship it    ✓     This is a very long note that would…  4
+ Short one  ✗     brief                                 12
+```
+
+Both settings are remembered in `~/.config/gridly/config.json` along with the
+theme and row height.
 
 ## Flipping the view
 
