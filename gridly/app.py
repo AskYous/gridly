@@ -229,6 +229,7 @@ class GridlyApp(App[None]):
             for index, column in enumerate(self._columns):
                 cells = [drawn[row.id][index] for row in self._rows]
                 height = self._row_height(cells, widths)
+                cells = self._centre(cells, widths, height)
                 table.add_row(
                     *cells,
                     height=height,
@@ -251,6 +252,7 @@ class GridlyApp(App[None]):
             for number, row in enumerate(self._rows, start=1):
                 cells = [drawn[column.id][number - 1] for column in self._columns]
                 height = self._row_height(cells, widths)
+                cells = self._centre(cells, widths, height)
                 table.add_row(
                     *cells,
                     height=height,
@@ -285,14 +287,22 @@ class GridlyApp(App[None]):
         """How many lines a row needs once its values have wrapped."""
         if not self._wrapping():
             return ROW_SIZES[self.row_size]
-        needed = 1
-        for cell, width in zip(cells, widths):
-            lines = sum(
-                max(1, ceil(cell_len(line) / max(1, width or 1)))
-                for line in cell.plain.split("\n")
-            )
-            needed = max(needed, lines)
-        return min(needed, MAX_WRAP_LINES)
+        needed = max(
+            (_lines_needed(cell, width) for cell, width in zip(cells, widths)),
+            default=1,
+        )
+        return min(max(1, needed), MAX_WRAP_LINES)
+
+    def _centre(
+        self, cells: list[Text], widths: list[int | None], height: int
+    ) -> list[Text]:
+        """Sit each value in the middle of the row its tallest neighbour set."""
+        if not self._wrapping():
+            return cells  # _cell has already centred these against a fixed height
+        return [
+            _centred(cell, height, _lines_needed(cell, width))
+            for cell, width in zip(cells, widths)
+        ]
 
     def _column_width(self, label: Text, cells: list[Text]) -> int | None:
         """A cap, not a width: a column narrower than the cap keeps its own size."""
@@ -378,6 +388,13 @@ class GridlyApp(App[None]):
         if row is None or column is None:
             return
         text = self._cell(column, row.values.get(column.id))
+        if self._wrapping():
+            table = self.table
+            text = _centred(
+                text,
+                table.ordered_rows[coordinate.row].height,
+                _lines_needed(text, table.ordered_columns[coordinate.column].width),
+            )
         if selected:
             text = text.copy()
             text.stylize(f"on {self.theme_variables.get('primary-darken-2', 'blue')}")
@@ -876,9 +893,18 @@ def _fit(text: str, lines: int) -> Text:
     return fitted
 
 
-def _centred(cell: Text, height: int) -> Text:
+def _lines_needed(cell: Text, width: int | None) -> int:
+    """How many screen lines a value takes once it has wrapped to `width`."""
+    return sum(
+        max(1, ceil(cell_len(line) / max(1, width or 1)))
+        for line in cell.plain.split("\n")
+    )
+
+
+def _centred(cell: Text, height: int, lines: int | None = None) -> Text:
     """Sit a value in the middle of its row rather than at the top of it."""
-    above = (height - cell.plain.count("\n") - 1) // 2
+    occupied = cell.plain.count("\n") + 1 if lines is None else lines
+    above = (height - occupied) // 2
     return Text("\n" * above) + cell if above > 0 else cell
 
 
