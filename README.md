@@ -54,7 +54,7 @@ where it can't, telling you how many it dropped.
 | `backspace` | clear the cell                                |
 | `a`         | add a row at the bottom                       |
 | `i`         | insert a row below the cursor                 |
-| `d`         | delete the current row                        |
+| `d`         | delete the current row (no prompt if it's empty) |
 | `c`         | add a column                                  |
 | `e`         | edit the current column (name, type, options) |
 | `x`         | delete the current column                     |

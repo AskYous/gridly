@@ -596,6 +596,10 @@ class GridlyApp(App[None]):
                 self.reload()
                 self.notify(f"Deleted row {number}.")
 
+        # There is nothing to lose in an empty row, so don't ask about it.
+        if all(value is None for value in row.values.values()):
+            done(True)
+            return
         self.push_screen(ConfirmScreen(f"Delete row {number}?"), done)
 
     # ---------------------------------------------------------------- columns
