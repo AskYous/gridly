@@ -66,6 +66,7 @@ where it can't, telling you how many it dropped.
 | `E`         | export the sheet to a CSV file                |
 | `cmd/ctrl+v`| paste cells copied from a spreadsheet         |
 | `t`         | change the colour theme                       |
+| `ctrl+p`    | command palette — every command, searchable   |
 | `?`         | help                                          |
 | `q`         | quit                                          |
 
@@ -79,6 +80,13 @@ back to the default rather than failing to start.
 
 Gridly paints its own colours rather than borrowing your terminal's — pick
 `ansi-dark` or `ansi-light` if you would rather it used your terminal palette.
+
+## Finding things
+
+`ctrl+p` opens the command palette. Everything the app can do is in there by
+name, with a sentence saying what it means — including the things whose keys
+are easy to miss, like moving a column left or right. A test asserts every
+key binding has a palette entry, so the two cannot drift apart.
 
 ## Dropdown options
 

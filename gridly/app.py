@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import sys
+from functools import partial
 from pathlib import Path
 from typing import Any
 
 from rich.text import Text
 from textual import events, on
-from textual.app import App, ComposeResult
+from textual.app import App, ComposeResult, SystemCommand
 from textual.binding import Binding
 from textual.coordinate import Coordinate
+from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Static
 
 from . import config
@@ -73,6 +75,43 @@ class GridlyApp(App[None]):
         Binding("question_mark", "help", "Help"),
         Binding("q", "quit", "Quit"),
     ]
+
+    # Everything the app can do, spelled out for the command palette. Keeping
+    # it beside the bindings is what stops the two drifting apart; the titles
+    # are longer than the footer's because there is room to say what they mean.
+    PALETTE: list[tuple[str, str, str, bool]] = [
+        ("edit_cell", "Edit cell", "Open the cell under the cursor", True),
+        ("edit_row", "Edit row as a form", "One field per column, on its own screen", True),
+        ("clear_cell", "Clear cell", "Leave the cell with no value at all", True),
+        ("add_row", "Add row", "Append an empty row at the bottom", True),
+        ("insert_row", "Insert row below", "Add an empty row under the cursor", True),
+        ("delete_row", "Delete row", "Remove the row under the cursor", True),
+        ("add_column", "Add column", "Define a new column and its type", True),
+        ("edit_column", "Edit column", "Rename, retype or relist the current column", True),
+        ("delete_column", "Delete column", "Remove the column and every value in it", True),
+        ("move_column(-1)", "Move column left", "Swap it with the column before it", True),
+        ("move_column(1)", "Move column right", "Swap it with the column after it", True),
+        ("copy_cell", "Copy cell or selection", "To the clipboard, tab separated", True),
+        ("copy_row", "Copy row", "The whole record, tab separated", True),
+        ("export", "Export to CSV", "Write the sheet out as a file", True),
+        ("flip", "Flip the view", "Draw records across the screen instead of down", True),
+        ("toggle_row_size", "Toggle row height", "Between one line and three", True),
+        ("help", "Show Gridly's keys", "The keyboard reference", True),
+        ("extend(0, 1)", "Select one cell right", "Grow the selection", False),
+        ("extend(0, -1)", "Select one cell left", "Grow the selection", False),
+        ("extend(-1, 0)", "Select one cell up", "Grow the selection", False),
+        ("extend(1, 0)", "Select one cell down", "Grow the selection", False),
+        ("clear_selection", "Drop the selection", "Back to a single cell", False),
+    ]
+    # Textual's own system commands already cover these two.
+    PALETTE_ELSEWHERE = {"change_theme", "quit"}
+
+    def get_system_commands(self, screen: Screen):
+        yield from super().get_system_commands(screen)
+        for action, title, description, discover in self.PALETTE:
+            yield SystemCommand(
+                title, description, partial(self.run_action, action), discover
+            )
 
     def __init__(self, path: str | Path) -> None:
         super().__init__()

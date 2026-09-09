@@ -374,6 +374,7 @@ class HelpScreen(ModalScreen[None]):
         ("E", "Export the sheet to a CSV file"),
         ("cmd/ctrl+v", "Paste cells copied from a spreadsheet"),
         ("t", "Change the colour theme"),
+        ("ctrl+p", "Command palette — every command, by name"),
         ("?", "This help"),
         ("q", "Quit"),
     ]
