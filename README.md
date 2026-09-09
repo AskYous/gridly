@@ -34,7 +34,7 @@ gridly ~/budget.gridly
 | Number   | `42`, `3.14`, `1,200`                     |
 | Boolean  | `yes/no`, `y/n`, `true/false`, `1/0`      |
 | Date     | `2026-09-07`, `07/09/2026`, `today`       |
-| Dropdown | one of the options you define on the column |
+| Dropdown | one of the options you define on the column, one per line |
 
 Bad input is refused with a message instead of being stored. Changing a
 column's type converts the existing values where it can and clears the cells
@@ -79,6 +79,13 @@ back to the default rather than failing to start.
 
 Gridly paints its own colours rather than borrowing your terminal's — pick
 `ansi-dark` or `ansi-light` if you would rather it used your terminal palette.
+
+## Dropdown options
+
+A dropdown's options are entered one per line, not comma separated, so a long
+list is readable and an option can contain a comma itself. Blank lines are
+ignored, options are trimmed, and two that differ only in case are refused.
+`ctrl+s` saves the column, since `enter` is busy starting the next option.
 
 ## Multi-line text
 

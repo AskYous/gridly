@@ -199,7 +199,10 @@ class RowFormScreen(ModalScreen[dict[int, Any] | None]):
 class ColumnScreen(ModalScreen[tuple[str, ColumnType, list[str]] | None]):
     """Create or edit a column definition."""
 
-    BINDINGS = [Binding("escape", "cancel", "Cancel", show=False)]
+    BINDINGS = [
+        Binding("ctrl+s", "save", "Save", show=False),
+        Binding("escape", "cancel", "Cancel", show=False),
+    ]
 
     def __init__(self, column: Column | None = None) -> None:
         super().__init__()
@@ -211,22 +214,28 @@ class ColumnScreen(ModalScreen[tuple[str, ColumnType, list[str]] | None]):
             yield Label(
                 "Edit column" if column else "New column", classes="dialog-title"
             )
-            yield Label("Name", classes="field-label")
-            yield Input(value=column.name if column else "", id="name")
-            yield Label("Type", classes="field-label")
-            yield Select(
-                [(t.label, t.value) for t in ColumnType],
-                value=(column.type if column else ColumnType.TEXT).value,
-                allow_blank=False,
-                id="type",
-            )
-            yield Label("Options (comma separated)", classes="field-label", id="options-label")
-            yield Input(
-                value=", ".join(column.options) if column else "",
-                placeholder="Low, Medium, High",
-                id="options",
-            )
+            # The fields scroll so the buttons and any error stay in view on a
+            # short terminal.
+            with VerticalScroll(classes="dialog-fields"):
+                yield Label("Name", classes="field-label")
+                yield Input(value=column.name if column else "", id="name")
+                yield Label("Type", classes="field-label")
+                yield Select(
+                    [(t.label, t.value) for t in ColumnType],
+                    value=(column.type if column else ColumnType.TEXT).value,
+                    allow_blank=False,
+                    id="type",
+                )
+                yield Label(
+                    "Options, one per line", classes="field-label", id="options-label"
+                )
+                yield TextArea(
+                    "\n".join(column.options) if column else "",
+                    soft_wrap=False,
+                    id="options",
+                )
             yield Static("", id="error", classes="error")
+            yield Static("[dim]ctrl+s save · esc cancel[/]", classes="dialog-help")
             with Horizontal(classes="buttons"):
                 yield Button("Save", variant="primary", id="save")
                 yield Button("Cancel", id="cancel")
@@ -241,7 +250,7 @@ class ColumnScreen(ModalScreen[tuple[str, ColumnType, list[str]] | None]):
     def _sync_options_field(self) -> None:
         is_dropdown = self._selected_type() is ColumnType.SELECT
         self.query_one("#options-label", Label).display = is_dropdown
-        self.query_one("#options", Input).display = is_dropdown
+        self.query_one("#options", TextArea).display = is_dropdown
 
     @on(Select.Changed, "#type")
     def type_changed(self) -> None:
@@ -249,13 +258,13 @@ class ColumnScreen(ModalScreen[tuple[str, ColumnType, list[str]] | None]):
 
     @on(Input.Submitted)
     @on(Button.Pressed, "#save")
-    def save(self) -> None:
+    def action_save(self) -> None:
         name = self.query_one("#name", Input).value.strip()
         coltype = self._selected_type()
         options = [
-            part.strip()
-            for part in self.query_one("#options", Input).value.split(",")
-            if part.strip()
+            line.strip()
+            for line in self.query_one("#options", TextArea).text.splitlines()
+            if line.strip()
         ]
         if not name:
             return self._error("Give the column a name")

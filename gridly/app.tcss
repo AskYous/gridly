@@ -139,3 +139,20 @@ CellEditScreen, PickScreen, ColumnScreen, ConfirmScreen, HelpScreen, RowFormScre
 .form Input:focus, .form TextArea:focus, .form Select:focus SelectCurrent {
     border: round $border;
 }
+
+/* The dropdown's options are a list, so they get a line each rather than one
+   long comma-separated field. The dialog takes the height it needs up to the
+   screen, and the fields scroll inside it so Save is always reachable. */
+ColumnScreen .dialog {
+    height: 100%;
+    max-height: 24;
+}
+
+ColumnScreen .dialog-fields {
+    height: 1fr;
+    scrollbar-size-vertical: 1;
+}
+
+#options {
+    height: 7;
+}
