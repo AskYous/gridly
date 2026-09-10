@@ -268,32 +268,34 @@ class ColumnScreen(
 
     def compose(self) -> ComposeResult:
         column = self.column
-        with Vertical(classes="dialog dialog--wide"):
-            yield Label(
-                "Edit column" if column else "New column", classes="dialog-title"
-            )
-            # The fields scroll so the buttons and any error stay in view on a
-            # short terminal.
-            with VerticalScroll(classes="dialog-fields"):
-                yield Label("Name", classes="field-label")
-                yield Input(value=column.name if column else "", id="name")
-                yield Label("Type", classes="field-label")
-                yield Select(
-                    [(t.label, t.value) for t in ColumnType],
-                    value=(column.type if column else ColumnType.TEXT).value,
-                    allow_blank=False,
-                    id="type",
+        # A full screen, laid out like the row form: the fields grew past what
+        # a modal could hold without scrolling inside a scroll.
+        with Vertical(classes="form"):
+            with Vertical(classes="form-inner"):
+                yield Label(
+                    "Edit column" if column else "New column",
+                    classes="dialog-title",
                 )
-                yield Label("Options", classes="field-label", id="options-label")
-                with VerticalScroll(id="options"):
-                    for option in column.options if column else []:
-                        yield OptionRow(option, column.color(option))
-                yield Button("+ add option", compact=True, id="add-option")
-            yield Static("", id="error", classes="error")
-            yield Static("[dim]ctrl+s save · esc cancel[/]", classes="dialog-help")
-            with Horizontal(classes="buttons"):
-                yield Button("Save", variant="primary", id="save")
-                yield Button("Cancel", id="cancel")
+                with VerticalScroll(classes="form-fields"):
+                    yield Label("Name", classes="field-label")
+                    yield Input(value=column.name if column else "", id="name")
+                    yield Label("Type", classes="field-label")
+                    yield Select(
+                        [(t.label, t.value) for t in ColumnType],
+                        value=(column.type if column else ColumnType.TEXT).value,
+                        allow_blank=False,
+                        id="type",
+                    )
+                    yield Label("Options", classes="field-label", id="options-label")
+                    with Vertical(id="options"):
+                        for option in column.options if column else []:
+                            yield OptionRow(option, column.color(option))
+                    yield Button("+ add option", compact=True, id="add-option")
+                yield Static("", id="error", classes="error")
+                yield Static(
+                    "[dim]tab move · ctrl+s save · esc cancel[/]",
+                    classes="dialog-help",
+                )
 
     def on_mount(self) -> None:
         self.query_one("#name", Input).focus()
@@ -305,16 +307,16 @@ class ColumnScreen(
     def _sync_options_field(self) -> None:
         is_dropdown = self._selected_type() is ColumnType.SELECT
         self.query_one("#options-label", Label).display = is_dropdown
-        self.query_one("#options", VerticalScroll).display = is_dropdown
+        self.query_one("#options", Vertical).display = is_dropdown
         self.query_one("#add-option", Button).display = is_dropdown
         if is_dropdown and not self.query(OptionRow):
-            self.query_one("#options", VerticalScroll).mount(OptionRow())
+            self.query_one("#options", Vertical).mount(OptionRow())
 
     @on(Button.Pressed, "#add-option")
     async def add_option(self) -> None:
         row = OptionRow()
         # Await the mount: the row has no children to focus until it is done.
-        await self.query_one("#options", VerticalScroll).mount(row)
+        await self.query_one("#options", Vertical).mount(row)
         row.query_one(".option-name", Input).focus()
         row.scroll_visible()
 
@@ -330,7 +332,6 @@ class ColumnScreen(
         self._sync_options_field()
 
     @on(Input.Submitted)
-    @on(Button.Pressed, "#save")
     def action_save(self) -> None:
         name = self.query_one("#name", Input).value.strip()
         coltype = self._selected_type()
@@ -355,7 +356,6 @@ class ColumnScreen(
     def _error(self, message: str) -> None:
         self.query_one("#error", Static).update(f"[red]{message}[/]")
 
-    @on(Button.Pressed, "#cancel")
     def action_cancel(self) -> None:
         self.dismiss(None)
 

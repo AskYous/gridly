@@ -143,11 +143,7 @@ CellEditScreen, PickScreen, ColumnScreen, ConfirmScreen, HelpScreen, RowFormScre
 /* The dropdown's options are a list, so they get a line each rather than one
    long comma-separated field. The dialog takes the height it needs up to the
    screen, and the fields scroll inside it so Save is always reachable. */
-ColumnScreen .dialog {
-    width: 66;
-}
-
-ColumnScreen .dialog, HelpScreen .dialog {
+HelpScreen .dialog {
     height: 100%;
     max-height: 24;
 }
@@ -162,7 +158,7 @@ HelpScreen .dialog {
     color: $text-accent;
 }
 
-ColumnScreen .dialog-fields, HelpScreen .dialog-fields {
+HelpScreen .dialog-fields {
     height: 1fr;
     scrollbar-size-vertical: 1;
 }
@@ -207,10 +203,9 @@ PickerApp {
 }
 
 /* One row per dropdown option: its name, its colour, and a way to drop it. */
+/* No scroll of its own: the form's own body is what scrolls. */
 #options {
     height: auto;
-    max-height: 10;
-    scrollbar-size-vertical: 1;
 }
 
 .option-row {

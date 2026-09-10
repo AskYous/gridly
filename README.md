@@ -104,8 +104,10 @@ key binding has a palette entry, so the two cannot drift apart.
 
 ## Dropdown options
 
-A dropdown's options are edited as a form: one row each, with a field for the
-name and a dropdown for the colour it is shown in. `+ add option` adds a row,
+`c` and `e` open a full-screen form — the same shape as the row form — rather
+than a dialog, because a name, a type and a list of options with their colours
+stopped fitting in one. A dropdown's options are rows: a field for the name and
+a dropdown for the colour it is shown in. `+ add option` adds a row,
 `✕` drops one, and a row left blank is ignored. Two options that differ only in
 case are refused, and so is an empty list.
 
