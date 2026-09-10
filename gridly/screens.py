@@ -441,6 +441,7 @@ class HelpScreen(ModalScreen[None]):
         ("Rows and columns", [
             ("a / i", "Add a row at the bottom / below"),
             ("D", "Duplicate the row"),
+            ("u / U", "Undo / redo the last change"),
             ("d", "Delete the row"),
             ("c / e / x", "Add / edit / delete a column"),
             ("[ / ]", "Move the column left / right"),

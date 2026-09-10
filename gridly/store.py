@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,9 @@ from typing import Any
 from .coltypes import OPTION_COLORS, ColumnType, decode, display, encode, parse
 
 SCHEMA_VERSION = "1"
+
+# How many changes can be taken back. Each one holds a copy of the sheet.
+UNDO_LIMIT = 40
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -83,6 +87,9 @@ class Sheet:
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys = ON")
         self.db.executescript(_SCHEMA)
+        self._undo: list[tuple[str, tuple]] = []
+        self._redo: list[tuple[str, tuple]] = []
+        self._pending: str | None = None
         self._migrate()
         self.db.execute(
             "INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', ?)",
@@ -91,6 +98,7 @@ class Sheet:
         self.db.commit()
         if is_new or not self.columns():
             self._seed()
+        self._undo.clear()  # a brand new sheet has nothing to go back to
 
     def _migrate(self) -> None:
         """Bring a sheet written by an older version up to date."""
@@ -111,6 +119,80 @@ class Sheet:
         self.add_column("Name", ColumnType.TEXT)
         self.add_column("Done", ColumnType.BOOLEAN)
         self.add_row()
+
+    # ------------------------------------------------------------------ undo
+
+    def _capture(self) -> tuple:
+        """Everything in the sheet, as plain rows."""
+        return (
+            self.db.execute(
+                "SELECT id, name, type, options, colors, position FROM columns"
+            ).fetchall(),
+            self.db.execute("SELECT id, position FROM rows").fetchall(),
+            self.db.execute("SELECT row_id, column_id, value FROM cells").fetchall(),
+        )
+
+    def _put_back(self, state: tuple) -> None:
+        columns, rows, cells = state
+        self.db.execute("DELETE FROM cells")
+        self.db.execute("DELETE FROM rows")
+        self.db.execute("DELETE FROM columns")
+        self.db.executemany(
+            "INSERT INTO columns (id, name, type, options, colors, position) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            [tuple(c) for c in columns],
+        )
+        self.db.executemany(
+            "INSERT INTO rows (id, position) VALUES (?, ?)", [tuple(r) for r in rows]
+        )
+        self.db.executemany(
+            "INSERT INTO cells (row_id, column_id, value) VALUES (?, ?, ?)",
+            [tuple(c) for c in cells],
+        )
+        self.db.commit()
+
+    def _checkpoint(self, label: str) -> None:
+        """Remember how things look before a change, unless one is under way."""
+        if self._pending is not None:
+            return
+        self._undo.append((label, self._capture()))
+        del self._undo[:-UNDO_LIMIT]
+        self._redo.clear()
+
+    @contextmanager
+    def change(self, label: str):
+        """Group a run of edits so they are taken back together."""
+        self._checkpoint(label)
+        outer, self._pending = self._pending, label
+        try:
+            yield
+        finally:
+            self._pending = outer
+
+    @property
+    def undoable(self) -> str | None:
+        return self._undo[-1][0] if self._undo else None
+
+    @property
+    def redoable(self) -> str | None:
+        return self._redo[-1][0] if self._redo else None
+
+    def undo(self) -> str | None:
+        """Take the last change back. Returns what it was, or None."""
+        if not self._undo:
+            return None
+        label, state = self._undo.pop()
+        self._redo.append((label, self._capture()))
+        self._put_back(state)
+        return label
+
+    def redo(self) -> str | None:
+        if not self._redo:
+            return None
+        label, state = self._redo.pop()
+        self._undo.append((label, self._capture()))
+        self._put_back(state)
+        return label
 
     # ------------------------------------------------------------------ reads
 
@@ -167,6 +249,7 @@ class Sheet:
         options: list[str] | None = None,
         colors: dict[str, str] | None = None,
     ) -> Column:
+        self._checkpoint(f"add column {name!r}")
         position = self.db.execute(
             "SELECT COALESCE(MAX(position), -1) + 1 AS p FROM columns"
         ).fetchone()["p"]
@@ -198,6 +281,7 @@ class Sheet:
         old = self.column(column_id)
         if old is None:
             raise KeyError(column_id)
+        self._checkpoint(f"edit column {old.name!r}")
         options = options or []
         dropped = 0
 
@@ -237,12 +321,15 @@ class Sheet:
         return dropped
 
     def delete_column(self, column_id: int) -> None:
+        gone = self.column(column_id)
+        self._checkpoint(f"delete column {gone.name!r}" if gone else "delete column")
         self.db.execute("DELETE FROM cells WHERE column_id = ?", (column_id,))
         self.db.execute("DELETE FROM columns WHERE id = ?", (column_id,))
         self.db.commit()
         self._renumber("columns")
 
     def move_column(self, column_id: int, offset: int) -> bool:
+        self._checkpoint("move column")
         cols = self.columns()
         index = next((i for i, c in enumerate(cols) if c.id == column_id), None)
         if index is None:
@@ -259,6 +346,7 @@ class Sheet:
         return True
 
     def add_row(self, after_position: int | None = None) -> int:
+        self._checkpoint("add row")
         if after_position is None:
             position = self.db.execute(
                 "SELECT COALESCE(MAX(position), -1) + 1 AS p FROM rows"
@@ -275,6 +363,10 @@ class Sheet:
 
     def duplicate_row(self, row_id: int) -> int:
         """Copy a row's values into a new row directly below it."""
+        with self.change("duplicate row"):
+            return self._duplicate_row(row_id)
+
+    def _duplicate_row(self, row_id: int) -> int:
         row = next((r for r in self.rows() if r.id == row_id), None)
         if row is None:
             raise KeyError(row_id)
@@ -290,12 +382,14 @@ class Sheet:
         return copy_id
 
     def delete_row(self, row_id: int) -> None:
+        self._checkpoint("delete row")
         self.db.execute("DELETE FROM cells WHERE row_id = ?", (row_id,))
         self.db.execute("DELETE FROM rows WHERE id = ?", (row_id,))
         self.db.commit()
         self._renumber("rows")
 
     def set_cell(self, row_id: int, column_id: int, value: Any) -> None:
+        self._checkpoint("edit cell")
         col = self.column(column_id)
         if col is None:
             raise KeyError(column_id)

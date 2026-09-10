@@ -99,6 +99,8 @@ class GridlyApp(App[None]):
         Binding("s", "toggle_row_size", "Size", show=False),
         Binding("w", "cycle_column_width", "Width", show=False),
         Binding("W", "toggle_overflow", "Wrap", show=False),
+        Binding("u", "undo", "Undo", show=False),
+        Binding("U", "redo", "Redo", show=False),
         Binding("y", "copy_cell", "Copy", show=False),
         Binding("Y", "copy_row", "Copy row", show=False),
         Binding("E", "export", "Export", show=False),
@@ -136,6 +138,8 @@ class GridlyApp(App[None]):
         ("copy_cell", "Copy cell or selection", "To the clipboard, tab separated", True),
         ("copy_row", "Copy row", "The whole record, tab separated", True),
         ("export", "Export to CSV", "Write the sheet out as a file", True),
+        ("undo", "Undo", "Take back the last change", True),
+        ("redo", "Redo", "Put back what undo took away", True),
         ("flip", "Flip the view", "Draw records across the screen instead of down", True),
         ("toggle_row_size", "Toggle row height", "Between one line and three", True),
         ("cycle_column_width", "Cycle column width", "Large, fit to the screen, small, or uncapped", True),
@@ -635,8 +639,9 @@ class GridlyApp(App[None]):
                 for column_id, value in values.items()
                 if value != row.values.get(column_id)
             ]
-            for column_id, value in changed:
-                self.sheet.set_cell(row.id, column_id, value)
+            with self.sheet.change(f"edit row {number}"):
+                for column_id, value in changed:
+                    self.sheet.set_cell(row.id, column_id, value)
             self.reload()
             self.notify(
                 f"Saved row {number}." if changed else f"Row {number} unchanged."
@@ -761,55 +766,28 @@ class GridlyApp(App[None]):
             for field_offset, column in enumerate(columns)
         ]
 
-        overwrites = 0
-        for record_index, column, raw in plan:
-            if record_index >= len(self._rows):
-                continue
-            try:
-                value = parse(column.type, raw, column.options)
-            except ValidationError:
-                continue
-            current = self._rows[record_index].values.get(column.id)
-            if current is not None and value != current:
-                overwrites += 1
-
         shape = (
             f"{record_span} {_plural(record_span, 'row')}"
             f" × {len(columns)} {_plural(len(columns), 'column')}"
         )
-
-        def apply(confirmed: bool | None = True) -> None:
-            if confirmed:
-                self._apply_paste(plan, shape, new_rows, clipped)
-
-        if overwrites:
-            self.push_screen(
-                ConfirmScreen(
-                    f"Paste {shape} here? It replaces {overwrites} filled "
-                    f"{_plural(overwrites, 'cell')}.",
-                    confirm="Paste",
-                ),
-                apply,
-            )
-        else:
-            apply()
+        self._apply_paste(plan, shape, new_rows, clipped)
 
     def _apply_paste(self, plan, shape: str, new_rows: int, clipped: int) -> None:
-        for _ in range(new_rows):
-            self.sheet.add_row()
-        rows = self.sheet.rows()
-
         skipped = 0
-        for record_index, column, raw in plan:
-            try:
-                value = parse(column.type, raw, column.options)
-            except ValidationError:
-                skipped += 1
-                continue
-            self.sheet.set_cell(rows[record_index].id, column.id, value)
+        with self.sheet.change(f"paste {shape}"):
+            for _ in range(new_rows):
+                self.sheet.add_row()
+            rows = self.sheet.rows()
+            for record_index, column, raw in plan:
+                try:
+                    value = parse(column.type, raw, column.options)
+                except ValidationError:
+                    skipped += 1
+                    continue
+                self.sheet.set_cell(rows[record_index].id, column.id, value)
 
         self.reload()
-        parts = [f"Pasted {shape}"]
+        parts = [f"Pasted {shape}, u to undo"]
         if new_rows:
             parts.append(f"{new_rows} {_plural(new_rows, 'row')} added")
         if skipped:
@@ -841,6 +819,22 @@ class GridlyApp(App[None]):
         self.sheet.add_row(after_position=row.position if row else None)
         self.reload(self._coordinate(record + 1, field))
 
+    def action_undo(self) -> None:
+        label = self.sheet.undo()
+        if label is None:
+            self.notify("Nothing to undo.", severity="warning")
+            return
+        self.reload()
+        self.notify(f"Undid {label}. U puts it back.")
+
+    def action_redo(self) -> None:
+        label = self.sheet.redo()
+        if label is None:
+            self.notify("Nothing to redo.", severity="warning")
+            return
+        self.reload()
+        self.notify(f"Redid {label}.")
+
     def action_duplicate_row(self) -> None:
         """Copy the row under the cursor and land on the copy."""
         row = self.current_row()
@@ -858,18 +852,9 @@ class GridlyApp(App[None]):
         if row is None:
             return
         number = self._rows.index(row) + 1
-
-        def done(confirmed: bool | None) -> None:
-            if confirmed:
-                self.sheet.delete_row(row.id)
-                self.reload()
-                self.notify(f"Deleted row {number}.")
-
-        # There is nothing to lose in an empty row, so don't ask about it.
-        if all(value is None for value in row.values.values()):
-            done(True)
-            return
-        self.push_screen(ConfirmScreen(f"Delete row {number}?"), done)
+        self.sheet.delete_row(row.id)
+        self.reload()
+        self.notify(f"Deleted row {number}. u to undo.")
 
     # ---------------------------------------------------------------- columns
 
@@ -914,15 +899,9 @@ class GridlyApp(App[None]):
         if column is None:
             return
 
-        def done(confirmed: bool | None) -> None:
-            if confirmed:
-                self.sheet.delete_column(column.id)
-                self.reload()
-                self.notify(f"Deleted column {column.name!r}.")
-
-        self.push_screen(
-            ConfirmScreen(f"Delete column {column.name!r} and all its values?"), done
-        )
+        self.sheet.delete_column(column.id)
+        self.reload()
+        self.notify(f"Deleted column {column.name!r}. u to undo.")
 
     def action_move_column(self, offset: int) -> None:
         column = self.current_column()

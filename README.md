@@ -74,7 +74,8 @@ where it can't, telling you how many it dropped.
 | `a`         | add a row at the bottom                       |
 | `i`         | insert a row below the cursor                 |
 | `D`         | duplicate the row below itself                |
-| `d`         | delete the current row (no prompt if it's empty) |
+| `u` / `U`   | undo / redo the last change                   |
+| `d`         | delete the current row                        |
 | `c`         | add a column                                  |
 | `e`         | edit the current column (name, type, options) |
 | `x`         | delete the current column                     |
@@ -166,6 +167,21 @@ accept happily.
 Unlike copying, export ignores the flipped view. The clipboard is for grabbing
 what you can see; a CSV is data going to another tool, and every one of those
 tools expects a header row with records underneath.
+
+## Undo
+
+`u` takes back the last change and `U` puts it back, forty deep. Everything
+that touches the sheet is covered: editing a cell, adding or deleting a row or
+column, moving a column, retyping one and losing the values that no longer fit,
+duplicating a row, saving the row form, and pasting.
+
+A run of edits that happened together is taken back together — pasting a block
+of thirty cells is one press of `u`, not thirty. Because of that, deleting a row
+or a column and pasting over filled cells no longer stop to ask first: they
+happen, and the notification tells you `u` will put them back.
+
+The stack lives for as long as the app is open. Closing the sheet forgets it —
+what is on disk is what you have.
 
 ## Column width
 
@@ -259,11 +275,10 @@ has. Cells are read through the target column's type, so `TRUE` lands in a
 boolean column and `1,200` in a number one; blank cells clear their target.
 A cell containing newlines arrives quoted and is stored whole, newlines and all.
 
-Two things it deliberately does not do: it never invents columns, so a block
-wider than the sheet is clipped and the notification tells you by how much, and
-it asks before replacing cells that already have values, since there is no undo.
+One thing it deliberately does not do: it never invents columns, so a block
+wider than the sheet is clipped and the notification tells you by how much.
 Values that don't fit their column's type are left alone and counted in the
-same notification.
+same notification, and the whole paste is a single `u` away from being undone.
 
 ## Row form
 
