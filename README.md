@@ -130,11 +130,18 @@ tools expects a header row with records underneath.
 ## Column width
 
 One long value used to stretch its column across the screen and push the rest
-out of sight. `w` cycles between large (36 characters), **fit**, small (16) and
-unlimited. These are caps, not widths: a column narrower than the cap keeps its
+out of sight. Gridly opens in **fit**, and `w` cycles between large (36
+characters), fit, small (16) and unlimited. Pressing it shows the whole cycle
+along the status line with the current setting marked, for a few seconds:
+
+```
+column width   large   fit  [ small ]  unlimited
+```
+
+`W` and `s` do the same for their own cycles. These are caps, not widths: a column narrower than the cap keeps its
 own size, so a yes/no column stays three wide however the cap is set.
 
-**Fit** has no fixed number — it shares the screen out between the columns so
+Fit has no fixed number — it shares the screen out between the columns so
 the whole table is visible across, with no sideways scrolling. Narrow columns
 are paid in full and what is left over goes to the wide ones, so the squeeze
 falls on whichever column is hogging the room. A fitted table follows the

@@ -16,6 +16,7 @@ from textual.binding import Binding
 from textual.coordinate import Coordinate
 from textual.message import Message
 from textual.screen import Screen
+from textual.timer import Timer
 from textual.widgets import DataTable, Footer, Header, Static
 
 from . import config
@@ -49,7 +50,7 @@ DEFAULT_ROW_SIZE = "small"
 # between the columns so the whole table fits across.
 COLUMN_WIDTHS = ("large", "fit", "small", "unlimited")
 COLUMN_CAPS = {"large": 36, "small": 16, "fit": None, "unlimited": None}
-DEFAULT_COLUMN_WIDTH = "large"
+DEFAULT_COLUMN_WIDTH = "fit"
 
 # However tight the fit, a column stays readable rather than disappearing.
 MIN_FIT_WIDTH = 6
@@ -168,6 +169,7 @@ class GridlyApp(App[None]):
         # Cursor moves we made ourselves are counted, because the CellHighlighted
         # they raise arrives later — anything left over is the user moving away,
         # which drops the selection.
+        self._cycle_timer: Timer | None = None
         self._anchor: Coordinate | None = None
         self._selected: set[Coordinate] = set()
         self._extending = 0
@@ -369,6 +371,8 @@ class GridlyApp(App[None]):
         return [min(natural, cap) for natural in naturals]
 
     def _update_status(self) -> None:
+        if self._cycle_timer is not None:
+            return  # a cycle is on show; it puts the status back when it ends
         columns, rows = self.sheet.counts()
         column = self.current_column()
         shape = f"{rows} {_plural(rows, 'row')} × {columns} {_plural(columns, 'column')}"
@@ -391,6 +395,23 @@ class GridlyApp(App[None]):
                 f"[dim]{self.sheet.path.name}  ·  {shape}{detail}  ·  ? for help[/]"
             )
         )
+
+    def _show_cycle(self, title: str, options: tuple[str, ...], current: str) -> None:
+        """Put the whole cycle on screen so it is clear what the key steps through."""
+        strip = Text.assemble((f"{title}  ", "dim"))
+        for option in options:
+            if option == current:
+                strip.append(f" {option} ", "reverse bold")
+            else:
+                strip.append(f" {option} ", "dim")
+        if self._cycle_timer is not None:
+            self._cycle_timer.stop()
+        self.query_one("#status", Static).update(strip)
+        self._cycle_timer = self.set_timer(3, self._end_cycle)
+
+    def _end_cycle(self) -> None:
+        self._cycle_timer = None
+        self._update_status()
 
     # -------------------------------------------------------------- selection
 
@@ -499,28 +520,19 @@ class GridlyApp(App[None]):
         ]
         config.save(column_width=self.column_width)
         self.reload()
-        cap = COLUMN_CAPS[self.column_width]
-        if self.column_width == "fit":
-            self.notify("Columns share the screen, so the whole table fits across.")
-        elif cap is None:
-            self.notify("Columns take the width they need.")
-        else:
-            self.notify(f"Columns stop at {cap} characters ({self.column_width}).")
+        self._show_cycle("column width", COLUMN_WIDTHS, self.column_width)
 
     def action_toggle_overflow(self) -> None:
         """Wrap a too-long value over the row, or cut it with an ellipsis."""
         self.overflow = OVERFLOWS[(OVERFLOWS.index(self.overflow) + 1) % len(OVERFLOWS)]
         config.save(overflow=self.overflow)
         self.reload()
+        self._show_cycle("long values", OVERFLOWS, self.overflow)
         if not self._capped():
             self.notify(
                 f"Long values {self.overflow} — but nothing is capped, so press w first.",
                 severity="warning",
             )
-        elif self.overflow == "wrap":
-            self.notify("Long values wrap, and rows grow to fit them.")
-        else:
-            self.notify(f"Long values end in an ellipsis. Rows are {self.row_size}.")
 
     def action_toggle_row_size(self) -> None:
         """Swap the row height for the other one."""
@@ -528,14 +540,13 @@ class GridlyApp(App[None]):
         self.row_size = sizes[(sizes.index(self.row_size) + 1) % len(sizes)]
         config.save(row_size=self.row_size)
         self.reload()
+        self._show_cycle("row height", tuple(ROW_SIZES), self.row_size)
         if self._wrapping():
             self.notify(
-                f"Rows are {self.row_size} — but wrapping is on, so they grow to fit."
-                " Press W for ellipsis.",
+                "Wrapping is on, so rows grow to fit whatever they hold."
+                " Press W for a fixed height.",
                 severity="warning",
             )
-        else:
-            self.notify(f"Rows are {self.row_size} now.")
 
     @on(DataTable.CellHighlighted)
     def cell_highlighted(self) -> None:
