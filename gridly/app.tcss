@@ -208,10 +208,11 @@ PickerApp {
     height: auto;
 }
 
+/* The rows sit directly under their label and against each other, the way an
+   input sits under its own label. The tinted name field separates them. */
 .option-row {
     height: 1;
     width: 1fr;
-    margin-bottom: 1;
 }
 
 /* These beat the bordered look the dialog gives its fields, focused or not:
