@@ -32,6 +32,7 @@ from .screens import (
 )
 from .clipboard import format_block, parse_block, to_system_clipboard
 from .csvfile import write_csv
+from .picker import choose_sheet
 from .store import Column, Row, Sheet
 
 DEFAULT_FILE = "sheet.gridly"
@@ -192,6 +193,7 @@ class GridlyApp(App[None]):
         theme = saved.get("theme")
         self.theme = theme if theme in self.available_themes else DEFAULT_THEME
         self._theme_loaded = True
+        config.remember(self.sheet.path)
         if saved.get("row_size") in ROW_SIZES:
             self.row_size = saved["row_size"]
         if saved.get("column_width") in COLUMN_WIDTHS:
@@ -1021,7 +1023,21 @@ def _render(column: Column, value: Any, lines: int) -> Text:
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if args and args[0] in ("-h", "--help"):
-        print(f"usage: gridly [FILE]\n\nOpens FILE (default: ./{DEFAULT_FILE}), creating it if needed.")
+        print(
+            f"usage: gridly [FILE]\n\n"
+            f"Opens FILE, creating it if needed. With no FILE, offers the sheets you\n"
+            f"had open lately, or ./{DEFAULT_FILE} if there are none yet."
+        )
         return 0
-    GridlyApp(args[0] if args else DEFAULT_FILE).run()
+
+    if args:
+        path: str | None = args[0]
+    elif config.recent():
+        path = choose_sheet(DEFAULT_FILE)
+        if path is None:
+            return 0
+    else:
+        path = DEFAULT_FILE  # nothing to choose between yet
+
+    GridlyApp(path).run()
     return 0

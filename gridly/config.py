@@ -31,3 +31,21 @@ def save(**values: Any) -> None:
         CONFIG_PATH.write_text(json.dumps(data, indent=2) + "\n")
     except OSError:
         pass
+
+
+RECENT_LIMIT = 15
+
+
+def remember(path: Path) -> None:
+    """Put a sheet at the top of the recent list."""
+    resolved = str(Path(path).expanduser().resolve())
+    keep = [p for p in load().get("recent", []) if p != resolved]
+    save(recent=[resolved] + keep[: RECENT_LIMIT - 1])
+
+
+def recent() -> list[Path]:
+    """Recently opened sheets, newest first, skipping any that have gone."""
+    seen = load().get("recent", [])
+    if not isinstance(seen, list):
+        return []
+    return [Path(p) for p in seen if isinstance(p, str) and Path(p).is_file()]

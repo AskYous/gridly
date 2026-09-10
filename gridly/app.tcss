@@ -166,3 +166,40 @@ ColumnScreen .dialog-fields, HelpScreen .dialog-fields {
 #options {
     height: 7;
 }
+
+/* The sheet picker, shown when the command line named no file. */
+.picker {
+    width: 72;
+    max-width: 100%;
+    height: 100%;
+    padding: 1 2;
+}
+
+PickerApp {
+    align-horizontal: center;
+}
+
+.picker Label {
+    width: 1fr;
+    padding-bottom: 1;
+}
+
+.picker OptionList {
+    height: 1fr;
+    border: round $border-blurred;
+    background: $surface;
+}
+
+.picker OptionList:focus {
+    border: round $border;
+}
+
+.picker Input {
+    width: 1fr;
+    border: round $border-blurred;
+    padding: 0 1;
+}
+
+.picker Input:focus {
+    border: round $border;
+}

@@ -20,9 +20,16 @@ checkout, so keep the folder where it is.
 ## Run
 
 ```sh
-gridly                   # opens ./sheet.gridly in the current directory
-gridly ~/budget.gridly
+gridly                   # offers the sheets you had open lately
+gridly ~/budget.gridly   # or open one straight away
 ```
+
+With no file named, Gridly lists the sheets you have opened before — newest
+first, with where they live and when they were last touched — so a sheet in
+some deep folder is two keystrokes away rather than a `cd`. Sheets that have
+since been deleted are dropped from the list. There is a field underneath for
+typing any other path, and `esc` quits without opening anything. The very first
+run has nothing to list, so it just opens `./sheet.gridly` as before.
 
 `gridly.sh` in this folder does the same thing without installing anything.
 
