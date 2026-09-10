@@ -5,6 +5,19 @@
 A terminal spreadsheet with typed columns. Every change is written straight to a
 SQLite file — there is no save step and nothing to lose on a crash.
 
+## Tests
+
+```sh
+.venv/bin/pip install -e ".[dev]"
+.venv/bin/python -m pytest
+```
+
+Twenty of them, each driving the real app through Textual's test harness rather
+than poking at its internals — pressing keys, reading what the grid ends up
+showing, and checking what landed in the file. They share a process, so
+`tests/conftest.py` points the config and the clipboard somewhere harmless
+before any of them run.
+
 ## The screenshot
 
 `python demo.py` writes `demo.gridly`, the task list the picture above is taken

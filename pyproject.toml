@@ -5,6 +5,9 @@ description = "A terminal spreadsheet with typed columns"
 requires-python = ">=3.10"
 dependencies = ["textual>=1.0"]
 
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio"]
+
 [project.scripts]
 gridly = "gridly.app:main"
 
@@ -17,3 +20,7 @@ packages = ["gridly"]
 
 [tool.setuptools.package-data]
 gridly = ["*.tcss"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
