@@ -219,6 +219,22 @@ class Sheet:
         self.db.commit()
         return cursor.lastrowid
 
+    def duplicate_row(self, row_id: int) -> int:
+        """Copy a row's values into a new row directly below it."""
+        row = next((r for r in self.rows() if r.id == row_id), None)
+        if row is None:
+            raise KeyError(row_id)
+        copy_id = self.add_row(after_position=row.position)
+        # Copying the stored text rather than the decoded values keeps every
+        # type exactly as it was, junk in a retyped column included.
+        self.db.execute(
+            "INSERT INTO cells (row_id, column_id, value) "
+            "SELECT ?, column_id, value FROM cells WHERE row_id = ?",
+            (copy_id, row_id),
+        )
+        self.db.commit()
+        return copy_id
+
     def delete_row(self, row_id: int) -> None:
         self.db.execute("DELETE FROM cells WHERE row_id = ?", (row_id,))
         self.db.execute("DELETE FROM rows WHERE id = ?", (row_id,))

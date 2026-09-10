@@ -82,6 +82,7 @@ class GridlyApp(App[None]):
         Binding("backspace", "clear_cell", "Clear", show=False),
         Binding("a", "add_row", "+Row"),
         Binding("i", "insert_row", "Insert row", show=False),
+        Binding("D", "duplicate_row", "Duplicate row", show=False),
         Binding("d", "delete_row", "-Row", show=False),
         Binding("c", "add_column", "+Col"),
         Binding("e", "edit_column", "Edit col", show=False),
@@ -102,6 +103,7 @@ class GridlyApp(App[None]):
         ("clear_cell", "Clear cell", "Leave the cell with no value at all", True),
         ("add_row", "Add row", "Append an empty row at the bottom", True),
         ("insert_row", "Insert row below", "Add an empty row under the cursor", True),
+        ("duplicate_row", "Duplicate row", "Copy this row into a new one below it", True),
         ("delete_row", "Delete row", "Remove the row under the cursor", True),
         ("add_column", "Add column", "Define a new column and its type", True),
         ("edit_column", "Edit column", "Rename, retype or relist the current column", True),
@@ -766,6 +768,18 @@ class GridlyApp(App[None]):
         record, field = self._indices()
         self.sheet.add_row(after_position=row.position if row else None)
         self.reload(self._coordinate(record + 1, field))
+
+    def action_duplicate_row(self) -> None:
+        """Copy the row under the cursor and land on the copy."""
+        row = self.current_row()
+        if row is None:
+            self.notify("Nothing to duplicate yet.", severity="warning")
+            return
+        number = self._rows.index(row) + 1
+        record, field = self._indices()
+        self.sheet.duplicate_row(row.id)
+        self.reload(self._coordinate(record + 1, field))
+        self.notify(f"Row {number} copied to row {number + 1}.")
 
     def action_delete_row(self) -> None:
         row = self.current_row()
