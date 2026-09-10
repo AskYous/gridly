@@ -104,32 +104,31 @@ key binding has a palette entry, so the two cannot drift apart.
 
 ## Dropdown options
 
-A dropdown's options are entered one per line, not comma separated, so a long
-list is readable and an option can contain a comma itself. Blank lines are
-ignored, options are trimmed, and two that differ only in case are refused.
-`ctrl+s` saves the column, since `enter` is busy starting the next option.
-
-Each option is shown in its own colour, in the grid, in the picker you get when
-editing a cell, and in the status line. Colours are handed out from a palette in
-the order you list the options — so a Low/Medium/High column reads green, yellow,
-red without you doing anything — and you can say which you want with `= colour`:
+A dropdown's options are edited as a form: one row each, with a field for the
+name and a dropdown for the colour it is shown in. `+ add option` adds a row,
+`✕` drops one, and a row left blank is ignored. Two options that differ only in
+case are refused, and so is an empty list.
 
 ```
-Low = green
-Medium = yellow
-High = red
+  Options
+   Low                       ███ green    ▼   ✕
+   Medium                    ███ yellow   ▼   ✕
+   High                      ███ red      ▼   ✕
+
+    + add option
 ```
 
-The nine colours are listed under the field, each written in itself, so you can
-see the names and what they look like without leaving the dialog: `green`,
-`yellow`, `red`, `blue`, `purple`, `teal`, `orange`, `pink`, `grey`. They are
-spelled out rather than borrowed from the terminal's own palette, which maps
-several names onto the same colour depending on the theme.
+Leave a colour unset and one is taken from the palette in the order the options
+are listed, so a Low/Medium/High column reads green, yellow, red without you
+choosing anything. The nine colours are `green`, `yellow`, `red`, `blue`,
+`purple`, `teal`, `orange`, `pink` and `grey`, each shown as a block of itself
+in the dropdown. They are spelled out rather than borrowed from the terminal's
+own palette, which maps several names onto the same colour depending on the
+theme.
 
-A word after `=` has to be one of them or the column will not save, which
-catches a typo; anything else after an `=` is taken as part of the option's own
-name. Sheets made before colours existed pick them up from the palette without
-being rewritten.
+Colours show in the grid, in the picker you get when editing a cell, and in the
+status line. Sheets made before colours existed pick them up from the palette
+without being rewritten.
 
 ## Multi-line text
 

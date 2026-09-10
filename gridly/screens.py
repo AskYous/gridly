@@ -26,23 +26,44 @@ from .store import Column, Row
 CLEAR_OPTION = "— clear —"
 
 
-def _palette() -> Text:
-    """The colours you can ask for, each written in itself."""
-    swatches = Text("colours: ", "dim")
-    for index, color in enumerate(OPTION_COLORS):
-        if index:
-            swatches.append("  ", "dim")
-        swatches.append(color, color_style(color))
-    return swatches
+def _swatch(color: str) -> Text:
+    """A colour's name next to a block of it, for the colour dropdown."""
+    return Text.assemble(("███ ", color_style(color)), (color, ""))
 
 
-def _option_lines(column: Column | None) -> str:
-    """A dropdown's options as text, each with the colour it is shown in."""
-    if column is None:
-        return ""
-    return "\n".join(
-        f"{option} = {column.color(option)}" for option in column.options
-    )
+class OptionRow(Horizontal):
+    """One dropdown option: what it is called and what colour it is shown in."""
+
+    def __init__(self, name: str = "", color: str | None = None) -> None:
+        super().__init__(classes="option-row")
+        self.option_name = name
+        self.option_color = color
+
+    def compose(self) -> ComposeResult:
+        yield Input(
+            value=self.option_name,
+            placeholder="option",
+            compact=True,
+            classes="option-name",
+        )
+        yield Select(
+            [(_swatch(color), color) for color in OPTION_COLORS],
+            value=(
+                self.option_color
+                if self.option_color in OPTION_COLORS
+                else Select.NULL
+            ),
+            prompt="colour",
+            compact=True,
+            classes="option-color",
+        )
+        yield Button("✕", compact=True, classes="option-remove")
+
+    @property
+    def option(self) -> tuple[str, str | None]:
+        name = self.query_one(".option-name", Input).value.strip()
+        picked = self.query_one(".option-color", Select).value
+        return name, None if picked is Select.NULL else str(picked)
 
 
 def build_editor(column: Column, value: Any, field_id: str):
@@ -263,15 +284,11 @@ class ColumnScreen(
                     allow_blank=False,
                     id="type",
                 )
-                yield Label(
-                    "Options, one per line — name = colour",
-                    classes="field-label",
-                    id="options-label",
-                )
-                yield TextArea(
-                    _option_lines(column), soft_wrap=False, id="options"
-                )
-                yield Static(_palette(), id="palette", classes="palette")
+                yield Label("Options", classes="field-label", id="options-label")
+                with VerticalScroll(id="options"):
+                    for option in column.options if column else []:
+                        yield OptionRow(option, column.color(option))
+                yield Button("+ add option", compact=True, id="add-option")
             yield Static("", id="error", classes="error")
             yield Static("[dim]ctrl+s save · esc cancel[/]", classes="dialog-help")
             with Horizontal(classes="buttons"):
@@ -288,8 +305,25 @@ class ColumnScreen(
     def _sync_options_field(self) -> None:
         is_dropdown = self._selected_type() is ColumnType.SELECT
         self.query_one("#options-label", Label).display = is_dropdown
-        self.query_one("#options", TextArea).display = is_dropdown
-        self.query_one("#palette", Static).display = is_dropdown
+        self.query_one("#options", VerticalScroll).display = is_dropdown
+        self.query_one("#add-option", Button).display = is_dropdown
+        if is_dropdown and not self.query(OptionRow):
+            self.query_one("#options", VerticalScroll).mount(OptionRow())
+
+    @on(Button.Pressed, "#add-option")
+    async def add_option(self) -> None:
+        row = OptionRow()
+        # Await the mount: the row has no children to focus until it is done.
+        await self.query_one("#options", VerticalScroll).mount(row)
+        row.query_one(".option-name", Input).focus()
+        row.scroll_visible()
+
+    @on(Button.Pressed, ".option-remove")
+    def remove_option(self, event: Button.Pressed) -> None:
+        event.stop()
+        row = event.button.parent
+        if isinstance(row, OptionRow):
+            row.remove()
 
     @on(Select.Changed, "#type")
     def type_changed(self) -> None:
@@ -302,22 +336,10 @@ class ColumnScreen(
         coltype = self._selected_type()
         options: list[str] = []
         chosen: dict[str, str] = {}
-        for line in self.query_one("#options", TextArea).text.splitlines():
-            # A colour is one word after the last "=", so an option may contain
-            # an "=" itself as long as what follows it is not a bare word.
-            head, sep, tail = line.rpartition("=")
-            color = tail.strip().lower()
-            if sep and color and " " not in color:
-                if color not in OPTION_COLORS:
-                    return self._error(
-                        f"{color!r} is not a colour. Try: "
-                        ', '.join(OPTION_COLORS)
-                    )
-                label = head.strip()
-            else:
-                label, color = line.strip(), ""
+        for row in self.query(OptionRow):
+            label, color = row.option
             if not label:
-                continue
+                continue  # a row left blank is a row you meant to drop
             options.append(label)
             if color:
                 chosen[label] = color
