@@ -219,13 +219,20 @@ PickerApp {
     margin-bottom: 1;
 }
 
-/* These beat the bordered look the dialog gives its fields: an option row is
-   one line, so a border would leave nothing but the top of it showing. */
-.option-row .option-name, .option-row .option-color SelectCurrent {
+/* These beat the bordered look the dialog gives its fields, focused or not:
+   an option row is one line, and a border on a one-line widget leaves nothing
+   but its edge showing. Focus is a lit background instead. */
+.option-row .option-name, .option-row .option-color SelectCurrent,
+.option-row .option-name:focus, .option-row .option-color:focus SelectCurrent {
     border: none;
     height: 1;
     padding: 0 1;
     background: $boost;
+}
+
+.option-row .option-name:focus, .option-row .option-color:focus SelectCurrent {
+    background: $primary 40%;
+    color: $text;
 }
 
 .option-row .option-name {
