@@ -14,6 +14,7 @@ from textual import events, on
 from textual.app import App, ComposeResult, SystemCommand
 from textual.binding import Binding
 from textual.coordinate import Coordinate
+from textual.message import Message
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Static
 
@@ -42,10 +43,16 @@ DEFAULT_THEME = "rose-pine"
 ROW_SIZES = {"small": 1, "large": 3}
 DEFAULT_ROW_SIZE = "small"
 
-# How wide a column may get. These are caps, not widths: a column narrower than
-# its cap keeps its own size, so a yes/no column never gets padded out.
-COLUMN_WIDTHS = {"small": 16, "large": 36, "unlimited": None}
+# How wide a column may get, in the order w cycles them. These are caps, not
+# widths: a column narrower than its cap keeps its own size, so a yes/no column
+# never gets padded out. "fit" has no fixed cap — it shares the viewport out
+# between the columns so the whole table fits across.
+COLUMN_WIDTHS = ("large", "fit", "small", "unlimited")
+COLUMN_CAPS = {"large": 36, "small": 16, "fit": None, "unlimited": None}
 DEFAULT_COLUMN_WIDTH = "large"
+
+# However tight the fit, a column stays readable rather than disappearing.
+MIN_FIT_WIDTH = 6
 
 # What a capped column does with a value too long for it. Wrapping grows the
 # row to fit, so row_size only applies to the ellipsis side.
@@ -54,6 +61,20 @@ DEFAULT_OVERFLOW = "ellipsis"
 
 # However much a wrapped row wants, it does not get to own the whole screen.
 MAX_WRAP_LINES = 12
+
+
+class Grid(DataTable):
+    """A DataTable that says when its own width changed.
+
+    The app's resize event arrives before the table has been laid out again, so
+    reading the table's width there gives the size it is about to stop being.
+    """
+
+    class Resized(Message):
+        pass
+
+    def on_resize(self, event: events.Resize) -> None:
+        self.post_message(self.Resized())
 
 
 class GridlyApp(App[None]):
@@ -115,7 +136,7 @@ class GridlyApp(App[None]):
         ("export", "Export to CSV", "Write the sheet out as a file", True),
         ("flip", "Flip the view", "Draw records across the screen instead of down", True),
         ("toggle_row_size", "Toggle row height", "Between one line and three", True),
-        ("cycle_column_width", "Cycle column width", "Cap columns small, large, or not at all", True),
+        ("cycle_column_width", "Cycle column width", "Large, fit to the screen, small, or uncapped", True),
         ("toggle_overflow", "Toggle wrapping", "A long value wraps over the row, or ends in an ellipsis", True),
         ("help", "Show Gridly's keys", "The keyboard reference", True),
         ("extend(0, 1)", "Select one cell right", "Grow the selection", False),
@@ -160,7 +181,7 @@ class GridlyApp(App[None]):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield DataTable(id="grid", cursor_type="cell", zebra_stripes=True)
+        yield Grid(id="grid", cursor_type="cell", zebra_stripes=True)
         yield Static("", id="status")
         yield Footer()
 
@@ -179,6 +200,15 @@ class GridlyApp(App[None]):
         table.show_row_labels = True
         table.focus()
         self.reload()
+        if self.column_width == "fit":
+            # The table has no size until it has been laid out once.
+            self.call_after_refresh(self.reload)
+
+    @on(Grid.Resized)
+    def grid_resized(self) -> None:
+        """A fitted table is sized against the viewport, so it follows it."""
+        if self.column_width == "fit" and self._columns:
+            self.reload()
 
     def watch_theme(self, theme: str) -> None:
         """Remember whatever theme was picked, wherever it was picked from."""
@@ -222,11 +252,13 @@ class GridlyApp(App[None]):
                 ]
                 for row in self._rows
             }
-            widths = []
-            for number, row in enumerate(self._rows, start=1):
-                label = Text(str(number), "dim")
-                width = self._column_width(label, drawn[row.id])
-                widths.append(width)
+            labels = [Text(str(n), "dim") for n in range(1, len(self._rows) + 1)]
+            widths = self._widths(
+                labels,
+                [drawn[row.id] for row in self._rows],
+                max((_widest(_field_label(c)) for c in self._columns), default=0),
+            )
+            for label, row, width in zip(labels, self._rows, widths):
                 table.add_column(label, key=str(row.id), width=width)
             for index, column in enumerate(self._columns):
                 cells = [drawn[row.id][index] for row in self._rows]
@@ -245,11 +277,13 @@ class GridlyApp(App[None]):
                 ]
                 for column in self._columns
             }
-            widths = []
-            for column in self._columns:
-                label = _field_label(column)
-                width = self._column_width(label, drawn[column.id])
-                widths.append(width)
+            labels = [_field_label(column) for column in self._columns]
+            widths = self._widths(
+                labels,
+                [drawn[column.id] for column in self._columns],
+                len(str(len(self._rows))),
+            )
+            for label, column, width in zip(labels, self._columns, widths):
                 table.add_column(label, key=str(column.id), width=width)
             for number, row in enumerate(self._rows, start=1):
                 cells = [drawn[column.id][number - 1] for column in self._columns]
@@ -269,9 +303,13 @@ class GridlyApp(App[None]):
             )
         self._update_status()
 
+    def _capped(self) -> bool:
+        """Is anything holding the columns back?"""
+        return self.column_width != "unlimited"
+
     def _wrapping(self) -> bool:
         """Wrapping needs a cap to wrap against, so both settings have to agree."""
-        return self.overflow == "wrap" and COLUMN_WIDTHS[self.column_width] is not None
+        return self.overflow == "wrap" and self._capped()
 
     def _cell(self, column: Column, value: Any) -> Text:
         """A value drawn for the row height that is in force."""
@@ -280,7 +318,7 @@ class GridlyApp(App[None]):
             return _render(column, value, MAX_WRAP_LINES)
         height = ROW_SIZES[self.row_size]
         cell = _centred(_render(column, value, height), height)
-        if COLUMN_WIDTHS[self.column_width] is not None:
+        if self._capped():
             cell.no_wrap = True
             cell.overflow = "ellipsis"
         return cell
@@ -306,13 +344,29 @@ class GridlyApp(App[None]):
             for cell, width in zip(cells, widths)
         ]
 
-    def _column_width(self, label: Text, cells: list[Text]) -> int | None:
-        """A cap, not a width: a column narrower than the cap keeps its own size."""
-        cap = COLUMN_WIDTHS[self.column_width]
-        if cap is None:
-            return None
-        natural = max([_widest(label)] + [_widest(cell) for cell in cells])
-        return max(1, min(natural, cap))
+    def _widths(
+        self, labels: list[Text], columns: list[list[Text]], row_label: int
+    ) -> list[int | None]:
+        """How wide each column gets. A cap never pads a narrow column out."""
+        naturals = [
+            max([_widest(label)] + [_widest(cell) for cell in cells] + [1])
+            for label, cells in zip(labels, columns)
+        ]
+        if self.column_width == "unlimited":
+            return [None] * len(naturals)
+        if self.column_width != "fit":
+            cap = COLUMN_CAPS[self.column_width]
+            return [min(natural, cap) for natural in naturals]
+
+        # Everything the table spends besides the columns themselves.
+        table = self.table
+        available = table.content_size.width or table.size.width
+        gutters = 2 * table.cell_padding
+        budget = available - (row_label + gutters) - gutters * len(naturals)
+        if available <= 0 or budget <= 0 or sum(naturals) <= budget:
+            return naturals
+        cap = _fair_cap(naturals, budget, MIN_FIT_WIDTH)
+        return [min(natural, cap) for natural in naturals]
 
     def _update_status(self) -> None:
         columns, rows = self.sheet.counts()
@@ -440,25 +494,25 @@ class GridlyApp(App[None]):
 
     def action_cycle_column_width(self) -> None:
         """Small, large, or let columns take whatever they need."""
-        widths = list(COLUMN_WIDTHS)
-        self.column_width = widths[
-            (widths.index(self.column_width) + 1) % len(widths)
+        self.column_width = COLUMN_WIDTHS[
+            (COLUMN_WIDTHS.index(self.column_width) + 1) % len(COLUMN_WIDTHS)
         ]
         config.save(column_width=self.column_width)
         self.reload()
-        cap = COLUMN_WIDTHS[self.column_width]
-        self.notify(
-            "Columns take the width they need."
-            if cap is None
-            else f"Columns stop at {cap} characters ({self.column_width})."
-        )
+        cap = COLUMN_CAPS[self.column_width]
+        if self.column_width == "fit":
+            self.notify("Columns share the screen, so the whole table fits across.")
+        elif cap is None:
+            self.notify("Columns take the width they need.")
+        else:
+            self.notify(f"Columns stop at {cap} characters ({self.column_width}).")
 
     def action_toggle_overflow(self) -> None:
         """Wrap a too-long value over the row, or cut it with an ellipsis."""
         self.overflow = OVERFLOWS[(OVERFLOWS.index(self.overflow) + 1) % len(OVERFLOWS)]
         config.save(overflow=self.overflow)
         self.reload()
-        if COLUMN_WIDTHS[self.column_width] is None:
+        if not self._capped():
             self.notify(
                 f"Long values {self.overflow} — but nothing is capped, so press w first.",
                 severity="warning",
@@ -869,6 +923,22 @@ class GridlyApp(App[None]):
 
 def _field_label(column: Column) -> Text:
     return Text.assemble((column.name, "bold"), (f"  {column.type.tag}", "dim"))
+
+
+def _fair_cap(naturals: list[int], budget: int, minimum: int) -> int:
+    """The widest every column may be so that together they fit the budget.
+
+    Narrow columns are paid in full and the room they leave is shared out among
+    the wide ones, so squeezing costs the columns that are hogging the screen.
+    """
+    remaining = budget
+    for index, width in enumerate(sorted(naturals)):
+        left = len(naturals) - index
+        if width * left <= remaining:
+            remaining -= width
+        else:
+            return max(minimum, remaining // left)
+    return max(naturals, default=minimum)
 
 
 def _widest(text: Text) -> int:

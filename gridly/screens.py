@@ -375,7 +375,8 @@ class HelpScreen(ModalScreen[None]):
             ("E", "Export the sheet to CSV"),
         ]),
         ("How it looks", [
-            ("w / W", "Column width cap / wrap or ellipsis"),
+            ("w", "Width: large, fit, small, uncapped"),
+            ("W", "Wrap long values, or cut with …"),
             ("s", "Row height: one line or three"),
             ("v", "Flip: records across, not down"),
             ("t", "Change the colour theme"),

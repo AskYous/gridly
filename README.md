@@ -49,7 +49,7 @@ where it can't, telling you how many it dropped.
 | `ctrl+s`    | save a text cell (`enter` adds a line there)  |
 | `space`     | same as `enter`                               |
 | `f`         | open the whole row as a form                  |
-| `w`         | cap column width: large, unlimited, small     |
+| `w`         | column width: large, fit, small, unlimited    |
 | `W`         | long values wrap, or end in an ellipsis       |
 | `v`         | flip the view: records across, not down       |
 | `s`         | row size: small or large                      |
@@ -130,9 +130,17 @@ tools expects a header row with records underneath.
 ## Column width
 
 One long value used to stretch its column across the screen and push the rest
-out of sight. `w` cycles the cap between large (36 characters), unlimited, and
-small (16). It is a cap, not a width: a column narrower than it keeps its own
-size, so a yes/no column stays three wide however the cap is set.
+out of sight. `w` cycles between large (36 characters), **fit**, small (16) and
+unlimited. These are caps, not widths: a column narrower than the cap keeps its
+own size, so a yes/no column stays three wide however the cap is set.
+
+**Fit** has no fixed number — it shares the screen out between the columns so
+the whole table is visible across, with no sideways scrolling. Narrow columns
+are paid in full and what is left over goes to the wide ones, so the squeeze
+falls on whichever column is hogging the room. A fitted table follows the
+window: resize the terminal and the columns are shared out again. Nothing goes
+below six characters, so on a very narrow window the table gives up and
+scrolls rather than reducing every column to nothing.
 
 `W` decides what a capped column does with a value too long for it — end it in
 an ellipsis, or wrap it. Wrapping grows each row to fit its tallest value, up
