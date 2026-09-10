@@ -79,7 +79,7 @@ class PickerApp(App[str | None]):
             yield Label("Recent sheets")
             options = OptionList(id="recent")
             yield options
-            yield Label("Or open another", classes="field-label")
+            yield Label("Or type a path — a new sheet if it isn't there yet", classes="field-label")
             yield Input(value=self.suggestion, id="path")
             yield Static(
                 "[dim]enter open · tab switch · esc quit[/]", classes="dialog-help"
