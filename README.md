@@ -109,6 +109,23 @@ list is readable and an option can contain a comma itself. Blank lines are
 ignored, options are trimmed, and two that differ only in case are refused.
 `ctrl+s` saves the column, since `enter` is busy starting the next option.
 
+Each option is shown in its own colour, in the grid, in the picker you get when
+editing a cell, and in the status line. Colours are handed out from a palette in
+the order you list the options — so a Low/Medium/High column reads green, yellow,
+red without you doing anything — and you can say which you want with `= colour`:
+
+```
+Low = green
+Medium = yellow
+High = red
+```
+
+The colours are `green`, `yellow`, `red`, `cyan`, `magenta`, `blue`, their
+`bright_` versions, and `white`. A word after `=` has to be one of them or the
+column will not save, which catches a typo; anything else after an `=` is taken
+as part of the option's own name. Sheets made before colours existed pick them
+up from the palette without being rewritten.
+
 ## Multi-line text
 
 A text column holds newlines. A row shows as many of them as its height allows

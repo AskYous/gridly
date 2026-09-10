@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .coltypes import ColumnType, decode, display, encode, parse
+from .coltypes import OPTION_COLORS, ColumnType, decode, display, encode, parse
 
 SCHEMA_VERSION = "1"
 
@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS columns (
     name     TEXT NOT NULL,
     type     TEXT NOT NULL,
     options  TEXT NOT NULL DEFAULT '[]',
+    colors   TEXT NOT NULL DEFAULT '{}',
     position INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS rows (
@@ -43,7 +44,23 @@ class Column:
     name: str
     type: ColumnType
     options: list[str] = field(default_factory=list)
+    colors: dict[str, str] = field(default_factory=dict)
     position: int = 0
+
+    def color(self, option: str | None) -> str | None:
+        """The colour a dropdown option is shown in.
+
+        A column that has never been given colours — one written before they
+        existed — still gets them, taken from the palette in option order, so
+        an old sheet looks the same as a new one without being rewritten.
+        """
+        if option is None:
+            return None
+        if option in self.colors:
+            return self.colors[option]
+        if option in self.options:
+            return OPTION_COLORS[self.options.index(option) % len(OPTION_COLORS)]
+        return None
 
 
 @dataclass
@@ -64,6 +81,7 @@ class Sheet:
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys = ON")
         self.db.executescript(_SCHEMA)
+        self._migrate()
         self.db.execute(
             "INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', ?)",
             (SCHEMA_VERSION,),
@@ -71,6 +89,17 @@ class Sheet:
         self.db.commit()
         if is_new or not self.columns():
             self._seed()
+
+    def _migrate(self) -> None:
+        """Bring a sheet written by an older version up to date."""
+        present = {
+            row["name"] for row in self.db.execute("PRAGMA table_info(columns)")
+        }
+        if "colors" not in present:
+            self.db.execute(
+                "ALTER TABLE columns ADD COLUMN colors TEXT NOT NULL DEFAULT '{}'"
+            )
+            self.db.commit()
 
     def close(self) -> None:
         self.db.close()
@@ -85,7 +114,8 @@ class Sheet:
 
     def columns(self) -> list[Column]:
         rows = self.db.execute(
-            "SELECT id, name, type, options, position FROM columns ORDER BY position, id"
+            "SELECT id, name, type, options, colors, position FROM columns "
+            "ORDER BY position, id"
         ).fetchall()
         return [
             Column(
@@ -93,6 +123,7 @@ class Sheet:
                 name=r["name"],
                 type=ColumnType(r["type"]),
                 options=json.loads(r["options"]),
+                colors=json.loads(r["colors"] or "{}"),
                 position=r["position"],
             )
             for r in rows
@@ -128,17 +159,30 @@ class Sheet:
     # -------------------------------------------------------------- mutations
 
     def add_column(
-        self, name: str, coltype: ColumnType, options: list[str] | None = None
+        self,
+        name: str,
+        coltype: ColumnType,
+        options: list[str] | None = None,
+        colors: dict[str, str] | None = None,
     ) -> Column:
         position = self.db.execute(
             "SELECT COALESCE(MAX(position), -1) + 1 AS p FROM columns"
         ).fetchone()["p"]
         cursor = self.db.execute(
-            "INSERT INTO columns (name, type, options, position) VALUES (?, ?, ?, ?)",
-            (name, coltype.value, json.dumps(options or []), position),
+            "INSERT INTO columns (name, type, options, colors, position) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                name,
+                coltype.value,
+                json.dumps(options or []),
+                json.dumps(colors or {}),
+                position,
+            ),
         )
         self.db.commit()
-        return Column(cursor.lastrowid, name, coltype, options or [], position)
+        return Column(
+            cursor.lastrowid, name, coltype, options or [], colors or {}, position
+        )
 
     def update_column(
         self,
@@ -146,6 +190,7 @@ class Sheet:
         name: str,
         coltype: ColumnType,
         options: list[str] | None = None,
+        colors: dict[str, str] | None = None,
     ) -> int:
         """Rename / retype a column. Returns how many cells were dropped in the process."""
         old = self.column(column_id)
@@ -176,8 +221,15 @@ class Sheet:
                 )
 
         self.db.execute(
-            "UPDATE columns SET name = ?, type = ?, options = ? WHERE id = ?",
-            (name, coltype.value, json.dumps(options), column_id),
+            "UPDATE columns SET name = ?, type = ?, options = ?, colors = ? "
+            "WHERE id = ?",
+            (
+                name,
+                coltype.value,
+                json.dumps(options),
+                json.dumps(colors or {}),
+                column_id,
+            ),
         )
         self.db.commit()
         return dropped

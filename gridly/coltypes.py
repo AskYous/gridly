@@ -151,3 +151,33 @@ def display(coltype: ColumnType, value: Any) -> str:
             return str(value)
         return f"{value:g}"
     return str(value)
+
+
+# Colours a dropdown option can be shown in. Handed out in this order when a
+# column does not say, which puts a Low/Medium/High list at green/yellow/red.
+OPTION_COLORS = (
+    "green",
+    "yellow",
+    "red",
+    "cyan",
+    "magenta",
+    "blue",
+    "bright_green",
+    "bright_yellow",
+    "bright_red",
+    "white",
+)
+
+
+def assign_colors(options: list[str], chosen: dict[str, str]) -> dict[str, str]:
+    """Fill in a colour for every option the user did not pick one for."""
+    colors: dict[str, str] = {}
+    spare = [c for c in OPTION_COLORS if c not in chosen.values()]
+    for index, option in enumerate(options):
+        if option in chosen:
+            colors[option] = chosen[option]
+        elif spare:
+            colors[option] = spare.pop(0)
+        else:
+            colors[option] = OPTION_COLORS[index % len(OPTION_COLORS)]
+    return colors

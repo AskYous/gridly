@@ -390,13 +390,18 @@ class GridlyApp(App[None]):
             )
         if column is not None:
             detail += f"  ·  {column.name}: {column.type.label}"
-            if column.type is ColumnType.SELECT:
-                detail += f" ({', '.join(column.options) or 'no options'})"
-        self.query_one("#status", Static).update(
-            Text.from_markup(
-                f"[dim]{self.sheet.path.name}  ·  {shape}{detail}  ·  ? for help[/]"
-            )
-        )
+        line = Text.from_markup(f"[dim]{self.sheet.path.name}  ·  {shape}{detail}[/]")
+        if column is not None and column.type is ColumnType.SELECT:
+            line.append(" (", "dim")
+            for index, option in enumerate(column.options):
+                if index:
+                    line.append(", ", "dim")
+                line.append(option, column.color(option) or "dim")
+            if not column.options:
+                line.append("no options", "dim")
+            line.append(")", "dim")
+        line.append("  ·  ? for help", "dim")
+        self.query_one("#status", Static).update(line)
 
     def _show_cycle(self, title: str, options: tuple[str, ...], current: str) -> None:
         """Put the whole cycle on screen so it is clear what the key steps through."""
@@ -869,12 +874,12 @@ class GridlyApp(App[None]):
     # ---------------------------------------------------------------- columns
 
     def action_add_column(self) -> None:
-        def done(result: tuple[str, ColumnType, list[str]] | None) -> None:
+        def done(result: tuple[str, ColumnType, list[str], dict[str, str]] | None) -> None:
             if result is None:
                 return
-            name, coltype, options = result
+            name, coltype, options, colors = result
             record, _ = self._indices()
-            self.sheet.add_column(name, coltype, options)
+            self.sheet.add_column(name, coltype, options, colors)
             self.reload(self._coordinate(record, len(self._columns)))
             self.notify(f"Added column {name!r} ({coltype.label}).")
 
@@ -886,11 +891,13 @@ class GridlyApp(App[None]):
             self.notify("No column here.", severity="warning")
             return
 
-        def done(result: tuple[str, ColumnType, list[str]] | None) -> None:
+        def done(result: tuple[str, ColumnType, list[str], dict[str, str]] | None) -> None:
             if result is None:
                 return
-            name, coltype, options = result
-            dropped = self.sheet.update_column(column.id, name, coltype, options)
+            name, coltype, options, colors = result
+            dropped = self.sheet.update_column(
+                column.id, name, coltype, options, colors
+            )
             self.reload()
             if dropped:
                 self.notify(
@@ -1016,7 +1023,7 @@ def _render(column: Column, value: Any, lines: int) -> Text:
     if column.type is ColumnType.DATE:
         return Text(display(column.type, value), "magenta")
     if column.type is ColumnType.SELECT:
-        return Text(display(column.type, value), "yellow")
+        return Text(display(column.type, value), column.color(value) or "yellow")
     return _fit(display(column.type, value), lines)
 
 

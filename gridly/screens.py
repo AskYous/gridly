@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from rich.text import Text
 from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -11,10 +12,26 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, OptionList, Select, Static, TextArea
 
-from .coltypes import ColumnType, ValidationError, display, parse
+from .coltypes import (
+    OPTION_COLORS,
+    ColumnType,
+    ValidationError,
+    assign_colors,
+    display,
+    parse,
+)
 from .store import Column, Row
 
 CLEAR_OPTION = "— clear —"
+
+
+def _option_lines(column: Column | None) -> str:
+    """A dropdown's options as text, each with the colour it is shown in."""
+    if column is None:
+        return ""
+    return "\n".join(
+        f"{option} = {column.color(option)}" for option in column.options
+    )
 
 
 def build_editor(column: Column, value: Any, field_id: str):
@@ -107,7 +124,14 @@ class PickScreen(ModalScreen[tuple[bool, Any]]):
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog"):
             yield Label(f"{self.column.name}  [dim]Dropdown[/]")
-            yield OptionList(CLEAR_OPTION, *self.column.options, id="options")
+            yield OptionList(
+                Text(CLEAR_OPTION, "dim"),
+                *(
+                    Text(option, self.column.color(option) or "")
+                    for option in self.column.options
+                ),
+                id="options",
+            )
             yield Static("[dim]enter pick · esc cancel[/]", classes="dialog-help")
 
     def on_mount(self) -> None:
@@ -196,7 +220,9 @@ class RowFormScreen(ModalScreen[dict[int, Any] | None]):
         self.dismiss(None)
 
 
-class ColumnScreen(ModalScreen[tuple[str, ColumnType, list[str]] | None]):
+class ColumnScreen(
+    ModalScreen[tuple[str, ColumnType, list[str], dict[str, str]] | None]
+):
     """Create or edit a column definition."""
 
     BINDINGS = [
@@ -227,12 +253,12 @@ class ColumnScreen(ModalScreen[tuple[str, ColumnType, list[str]] | None]):
                     id="type",
                 )
                 yield Label(
-                    "Options, one per line", classes="field-label", id="options-label"
+                    "Options, one per line — name = colour",
+                    classes="field-label",
+                    id="options-label",
                 )
                 yield TextArea(
-                    "\n".join(column.options) if column else "",
-                    soft_wrap=False,
-                    id="options",
+                    _option_lines(column), soft_wrap=False, id="options"
                 )
             yield Static("", id="error", classes="error")
             yield Static("[dim]ctrl+s save · esc cancel[/]", classes="dialog-help")
@@ -261,18 +287,35 @@ class ColumnScreen(ModalScreen[tuple[str, ColumnType, list[str]] | None]):
     def action_save(self) -> None:
         name = self.query_one("#name", Input).value.strip()
         coltype = self._selected_type()
-        options = [
-            line.strip()
-            for line in self.query_one("#options", TextArea).text.splitlines()
-            if line.strip()
-        ]
+        options: list[str] = []
+        chosen: dict[str, str] = {}
+        for line in self.query_one("#options", TextArea).text.splitlines():
+            # A colour is one word after the last "=", so an option may contain
+            # an "=" itself as long as what follows it is not a bare word.
+            head, sep, tail = line.rpartition("=")
+            color = tail.strip().lower()
+            if sep and color and " " not in color:
+                if color not in OPTION_COLORS:
+                    return self._error(
+                        f"{color!r} is not a colour. Try: "
+                        f"{', '.join(OPTION_COLORS[:6])}…"
+                    )
+                label = head.strip()
+            else:
+                label, color = line.strip(), ""
+            if not label:
+                continue
+            options.append(label)
+            if color:
+                chosen[label] = color
+
         if not name:
             return self._error("Give the column a name")
         if coltype is ColumnType.SELECT and not options:
             return self._error("A dropdown needs at least one option")
         if len(set(o.lower() for o in options)) != len(options):
             return self._error("Options must be unique")
-        self.dismiss((name, coltype, options))
+        self.dismiss((name, coltype, options, assign_colors(options, chosen)))
 
     def _error(self, message: str) -> None:
         self.query_one("#error", Static).update(f"[red]{message}[/]")
