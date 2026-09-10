@@ -1,6 +1,6 @@
 # Gridly
 
-<img width="1326" height="791" alt="image" src="https://github.com/user-attachments/assets/636d107b-7d50-40cb-9138-be8beddf5fad" />
+<img width="1141" height="794" alt="image" src="https://github.com/user-attachments/assets/a4f05501-15f3-4d92-933d-9ca2a58fd7ca" />
 
 A terminal spreadsheet with typed columns. Every change is written straight to a
 SQLite file — there is no save step and nothing to lose on a crash.
