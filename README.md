@@ -8,8 +8,8 @@ SQLite file — there is no save step and nothing to lose on a crash.
 ## The screenshot
 
 `python demo.py` writes `demo.gridly`, the task list the picture above is taken
-from — eight columns covering every type, with the dropdowns coloured. Open it
-at about 142×14 and everything fits without truncating:
+from — thirty rows across eight columns covering every type, with the dropdowns
+coloured. About 142×36 shows the whole thing:
 
 ```sh
 python demo.py && gridly demo.gridly
