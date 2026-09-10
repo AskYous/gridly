@@ -120,11 +120,16 @@ Medium = yellow
 High = red
 ```
 
-The colours are `green`, `yellow`, `red`, `cyan`, `magenta`, `blue`, their
-`bright_` versions, and `white`. A word after `=` has to be one of them or the
-column will not save, which catches a typo; anything else after an `=` is taken
-as part of the option's own name. Sheets made before colours existed pick them
-up from the palette without being rewritten.
+The nine colours are listed under the field, each written in itself, so you can
+see the names and what they look like without leaving the dialog: `green`,
+`yellow`, `red`, `blue`, `purple`, `teal`, `orange`, `pink`, `grey`. They are
+spelled out rather than borrowed from the terminal's own palette, which maps
+several names onto the same colour depending on the theme.
+
+A word after `=` has to be one of them or the column will not save, which
+catches a typo; anything else after an `=` is taken as part of the option's own
+name. Sheets made before colours existed pick them up from the palette without
+being rewritten.
 
 ## Multi-line text
 

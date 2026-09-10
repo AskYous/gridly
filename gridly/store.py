@@ -56,10 +56,12 @@ class Column:
         """
         if option is None:
             return None
-        if option in self.colors:
-            return self.colors[option]
+        stored = self.colors.get(option)
+        if stored in OPTION_COLORS:
+            return stored
         if option in self.options:
-            return OPTION_COLORS[self.options.index(option) % len(OPTION_COLORS)]
+            names = tuple(OPTION_COLORS)
+            return names[self.options.index(option) % len(names)]
         return None
 
 

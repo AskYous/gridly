@@ -153,31 +153,39 @@ def display(coltype: ColumnType, value: Any) -> str:
     return str(value)
 
 
-# Colours a dropdown option can be shown in. Handed out in this order when a
-# column does not say, which puts a Low/Medium/High list at green/yellow/red.
-OPTION_COLORS = (
-    "green",
-    "yellow",
-    "red",
-    "cyan",
-    "magenta",
-    "blue",
-    "bright_green",
-    "bright_yellow",
-    "bright_red",
-    "white",
-)
+# Colours a dropdown option can be shown in, and what each one actually is.
+# They are spelled out rather than named after the terminal's own colours,
+# because those are mapped through whichever theme is loaded and several of
+# them collapse onto the same value. Handed out in this order when a column
+# does not say, which puts a Low/Medium/High list at green/yellow/red.
+OPTION_COLORS = {
+    "green": "#30A46C",
+    "yellow": "#D9A400",
+    "red": "#E5484D",
+    "blue": "#3E8FF0",
+    "purple": "#8E4EC6",
+    "teal": "#12A594",
+    "orange": "#F76B15",
+    "pink": "#D6409F",
+    "grey": "#8B8D98",
+}
+
+
+def color_style(name: str | None) -> str:
+    """The colour to draw an option in, or nothing if the name is unknown."""
+    return OPTION_COLORS.get(name or "", "")
 
 
 def assign_colors(options: list[str], chosen: dict[str, str]) -> dict[str, str]:
     """Fill in a colour for every option the user did not pick one for."""
+    names = tuple(OPTION_COLORS)
     colors: dict[str, str] = {}
-    spare = [c for c in OPTION_COLORS if c not in chosen.values()]
+    spare = [c for c in names if c not in chosen.values()]
     for index, option in enumerate(options):
         if option in chosen:
             colors[option] = chosen[option]
         elif spare:
             colors[option] = spare.pop(0)
         else:
-            colors[option] = OPTION_COLORS[index % len(OPTION_COLORS)]
+            colors[option] = names[index % len(names)]
     return colors

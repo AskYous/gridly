@@ -203,3 +203,9 @@ PickerApp {
 .picker Input:focus {
     border: round $border;
 }
+
+/* The colours a dropdown option can be given, written in themselves. */
+.palette {
+    height: auto;
+    padding-top: 1;
+}

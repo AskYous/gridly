@@ -20,7 +20,7 @@ from textual.timer import Timer
 from textual.widgets import DataTable, Footer, Header, Static
 
 from . import config
-from .coltypes import ColumnType, ValidationError, display, parse
+from .coltypes import ColumnType, ValidationError, color_style, display, parse
 from .screens import (
     CellEditScreen,
     ColumnScreen,
@@ -396,7 +396,7 @@ class GridlyApp(App[None]):
             for index, option in enumerate(column.options):
                 if index:
                     line.append(", ", "dim")
-                line.append(option, column.color(option) or "dim")
+                line.append(option, color_style(column.color(option)) or "dim")
             if not column.options:
                 line.append("no options", "dim")
             line.append(")", "dim")
@@ -1023,7 +1023,7 @@ def _render(column: Column, value: Any, lines: int) -> Text:
     if column.type is ColumnType.DATE:
         return Text(display(column.type, value), "magenta")
     if column.type is ColumnType.SELECT:
-        return Text(display(column.type, value), column.color(value) or "yellow")
+        return Text(display(column.type, value), color_style(column.color(value)))
     return _fit(display(column.type, value), lines)
 
 

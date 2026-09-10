@@ -17,12 +17,23 @@ from .coltypes import (
     ColumnType,
     ValidationError,
     assign_colors,
+    color_style,
     display,
     parse,
 )
 from .store import Column, Row
 
 CLEAR_OPTION = "— clear —"
+
+
+def _palette() -> Text:
+    """The colours you can ask for, each written in itself."""
+    swatches = Text("colours: ", "dim")
+    for index, color in enumerate(OPTION_COLORS):
+        if index:
+            swatches.append("  ", "dim")
+        swatches.append(color, color_style(color))
+    return swatches
 
 
 def _option_lines(column: Column | None) -> str:
@@ -127,7 +138,7 @@ class PickScreen(ModalScreen[tuple[bool, Any]]):
             yield OptionList(
                 Text(CLEAR_OPTION, "dim"),
                 *(
-                    Text(option, self.column.color(option) or "")
+                    Text(option, color_style(self.column.color(option)))
                     for option in self.column.options
                 ),
                 id="options",
@@ -260,6 +271,7 @@ class ColumnScreen(
                 yield TextArea(
                     _option_lines(column), soft_wrap=False, id="options"
                 )
+                yield Static(_palette(), id="palette", classes="palette")
             yield Static("", id="error", classes="error")
             yield Static("[dim]ctrl+s save · esc cancel[/]", classes="dialog-help")
             with Horizontal(classes="buttons"):
@@ -277,6 +289,7 @@ class ColumnScreen(
         is_dropdown = self._selected_type() is ColumnType.SELECT
         self.query_one("#options-label", Label).display = is_dropdown
         self.query_one("#options", TextArea).display = is_dropdown
+        self.query_one("#palette", Static).display = is_dropdown
 
     @on(Select.Changed, "#type")
     def type_changed(self) -> None:
@@ -298,7 +311,7 @@ class ColumnScreen(
                 if color not in OPTION_COLORS:
                     return self._error(
                         f"{color!r} is not a colour. Try: "
-                        f"{', '.join(OPTION_COLORS[:6])}…"
+                        ', '.join(OPTION_COLORS)
                     )
                 label = head.strip()
             else:
