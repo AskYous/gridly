@@ -65,10 +65,10 @@ async def main():
 
         # --- one that changes state
         await run(app, pilot, "Flip the view")
-        print("flipped          :", app.flipped)
-        assert app.flipped
+        print("flipped          :", app.view.flipped)
+        assert app.view.flipped
         await run(app, pilot, "Flip the view")
-        assert not app.flipped
+        assert not app.view.flipped
 
         # --- one that adds data
         rows_before = len(app.sheet.rows())

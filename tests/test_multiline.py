@@ -3,14 +3,15 @@ import asyncio, pathlib, tempfile
 from textual import events
 from textual.coordinate import Coordinate
 from textual.widgets import DataTable, Input, Static, TextArea
-from gridly.app import GridlyApp, _fit
+from gridly.app import GridlyApp
+from gridly.view import fit
 from gridly.coltypes import ColumnType
 from gridly.screens import CellEditScreen, RowFormScreen
 from gridly.store import Sheet
 
-print("1-line row :", repr(_fit("first\nsecond\nthird", 1).plain))
-print("3-line row :", repr(_fit("first\nsecond\nthird", 3).plain))
-print("tabs flat  :", repr(_fit("a\tb", 1).plain))
+print("1-line row :", repr(fit("first\nsecond\nthird", 1).plain))
+print("3-line row :", repr(fit("first\nsecond\nthird", 3).plain))
+print("tabs flat  :", repr(fit("a\tb", 1).plain))
 
 path = pathlib.Path(tempfile.mkdtemp()) / "ml.gridly"
 s = Sheet(path); s.add_column("Qty", ColumnType.NUMBER); s.close()

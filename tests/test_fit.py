@@ -1,16 +1,17 @@
 import os as _os, tempfile as _tf; _os.environ["XDG_CONFIG_HOME"] = _tf.mkdtemp()
 import asyncio, pathlib, tempfile
 from textual.widgets import DataTable
-from gridly.app import MIN_FIT_WIDTH, GridlyApp, _fair_cap
+from gridly.app import GridlyApp
+from gridly.view import MIN_FIT_WIDTH, fair_cap
 from gridly.coltypes import ColumnType
 from gridly.store import Sheet
 
 # --- the allocator on its own
-print("all fit      :", _fair_cap([3, 4, 5], 30, 6), "(no squeeze needed)")
-print("squeeze wide :", _fair_cap([3, 4, 40], 30, 6), "(narrow ones paid in full)")
-print("very tight   :", _fair_cap([40, 40, 40], 9, 6), "(floor kicks in)")
-assert _fair_cap([3, 4, 40], 30, 6) == 23, _fair_cap([3, 4, 40], 30, 6)
-assert _fair_cap([40, 40, 40], 9, 6) == 6
+print("all fit      :", fair_cap([3, 4, 5], 30, 6), "(no squeeze needed)")
+print("squeeze wide :", fair_cap([3, 4, 40], 30, 6), "(narrow ones paid in full)")
+print("very tight   :", fair_cap([40, 40, 40], 9, 6), "(floor kicks in)")
+assert fair_cap([3, 4, 40], 30, 6) == 23, fair_cap([3, 4, 40], 30, 6)
+assert fair_cap([40, 40, 40], 9, 6) == 6
 
 LONG = "Confirm with Waseem that change-primary-number will be fixed in the OCP side"
 path = pathlib.Path(tempfile.mkdtemp()) / "f.gridly"
@@ -32,7 +33,7 @@ def spread(app):
 async def main():
     app = GridlyApp(path)
     async with app.run_test(size=(80, 20)) as pilot:
-        while app.column_width != "fit":
+        while app.view.column_width != "fit":
             await pilot.press("w"); await pilot.pause()
         await pilot.pause()
         used, available, widths = spread(app)
@@ -75,8 +76,8 @@ async def main():
     app2 = GridlyApp(path)
     async with app2.run_test(size=(80, 20)) as pilot:
         await pilot.pause()
-        print("reopened     :", app2.column_width)
-        assert app2.column_width == "fit"
+        print("reopened     :", app2.view.column_width)
+        assert app2.view.column_width == "fit"
         used, available, _ = spread(app2)
         assert used <= available, (used, available)
     print("ALL FIT TESTS DONE")

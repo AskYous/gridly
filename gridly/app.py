@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import sys
 from functools import partial
-from math import ceil
 from pathlib import Path
 from typing import Any
 
-from rich.cells import cell_len
 from rich.text import Text
 from textual import events, on
 from textual.app import App, ComposeResult, SystemCommand
@@ -34,36 +32,21 @@ from .clipboard import format_block, parse_block, to_system_clipboard
 from .csvfile import write_csv
 from .picker import choose_sheet
 from .store import Column, Row, Sheet
+from .view import (
+    COLUMN_WIDTHS,
+    OVERFLOWS,
+    ROW_SIZES,
+    View,
+    centred,
+    field_label,
+    lines_needed,
+    widest,
+)
 
 DEFAULT_FILE = "sheet.gridly"
 
 # What a first run opens with, before anyone has pressed t.
 DEFAULT_THEME = "rose-pine"
-
-# How many lines a row gets on screen. Both are odd heights, so a single-line
-# value has as many blank lines above it as below.
-ROW_SIZES = {"small": 1, "large": 3}
-DEFAULT_ROW_SIZE = "small"
-
-# How wide a column may get, in the order w cycles them. These are caps, not
-# widths: a column narrower than its cap keeps its own size, so a yes/no column
-# never gets padded out. "fit" has no fixed cap — it shares the viewport out
-# between the columns so the whole table fits across.
-COLUMN_WIDTHS = ("large", "fit", "small", "unlimited")
-COLUMN_CAPS = {"large": 36, "small": 16, "fit": None, "unlimited": None}
-DEFAULT_COLUMN_WIDTH = "fit"
-
-# However tight the fit, a column stays readable rather than disappearing.
-MIN_FIT_WIDTH = 6
-
-# What a capped column does with a value too long for it. Wrapping grows the
-# row to fit, so row_size only applies to the ellipsis side.
-OVERFLOWS = ("ellipsis", "wrap")
-DEFAULT_OVERFLOW = "ellipsis"
-
-# However much a wrapped row wants, it does not get to own the whole screen.
-MAX_WRAP_LINES = 12
-
 
 class Grid(DataTable):
     """A DataTable that says when its own width changed.
@@ -169,7 +152,7 @@ class GridlyApp(App[None]):
         self._rows: list[Row] = []
         # Draw records down the screen (normal) or across it (flipped). This is
         # only ever a way of looking at the sheet — the data is the same either way.
-        self.flipped = False
+        self.view = View.load()
         # A keyboard selection: where it started and which cells it covers now.
         # Cursor moves we made ourselves are counted, because the CellHighlighted
         # they raise arrives later — anything left over is the user moving away,
@@ -180,9 +163,6 @@ class GridlyApp(App[None]):
         self._extending = 0
         # How many lines each row is given. Also only a way of looking at the
         # sheet, but a taller row has room to show more of a multi-line value.
-        self.row_size = DEFAULT_ROW_SIZE
-        self.column_width = DEFAULT_COLUMN_WIDTH
-        self.overflow = DEFAULT_OVERFLOW
 
     # ------------------------------------------------------------------ setup
 
@@ -198,24 +178,18 @@ class GridlyApp(App[None]):
         self.theme = theme if theme in self.available_themes else DEFAULT_THEME
         self._theme_loaded = True
         config.remember(self.sheet.path)
-        if saved.get("row_size") in ROW_SIZES:
-            self.row_size = saved["row_size"]
-        if saved.get("column_width") in COLUMN_WIDTHS:
-            self.column_width = saved["column_width"]
-        if saved.get("overflow") in OVERFLOWS:
-            self.overflow = saved["overflow"]
         table = self.query_one("#grid", DataTable)
         table.show_row_labels = True
         table.focus()
         self.reload()
-        if self.column_width == "fit":
+        if self.view.column_width == "fit":
             # The table has no size until it has been laid out once.
             self.call_after_refresh(self.reload)
 
     @on(Grid.Resized)
     def grid_resized(self) -> None:
         """A fitted table is sized against the viewport, so it follows it."""
-        if self.column_width == "fit" and self._columns:
+        if self.view.column_width == "fit" and self._columns:
             self.reload()
 
     def watch_theme(self, theme: str) -> None:
@@ -231,12 +205,12 @@ class GridlyApp(App[None]):
 
     def _coordinate(self, record: int, field: int) -> Coordinate:
         """Where a given record and column sit on screen."""
-        return Coordinate(field, record) if self.flipped else Coordinate(record, field)
+        return Coordinate(field, record) if self.view.flipped else Coordinate(record, field)
 
     def _indices(self, coordinate: Coordinate | None = None) -> tuple[int, int]:
         """The record and column a screen position points at."""
         at = self.table.cursor_coordinate if coordinate is None else coordinate
-        return (at.column, at.row) if self.flipped else (at.row, at.column)
+        return (at.column, at.row) if self.view.flipped else (at.row, at.column)
 
     # ---------------------------------------------------------------- drawing
 
@@ -251,57 +225,59 @@ class GridlyApp(App[None]):
         self._columns = self.sheet.columns()
         self._rows = self.sheet.rows()
 
-        if self.flipped:
+        if self.view.flipped:
             # A grid column is a record: size it from that record's own values.
             drawn = {
                 row.id: [
-                    self._cell(column, row.values.get(column.id))
+                    self.view.cell(column, row.values.get(column.id))
                     for column in self._columns
                 ]
                 for row in self._rows
             }
             labels = [Text(str(n), "dim") for n in range(1, len(self._rows) + 1)]
-            widths = self._widths(
+            widths = self.view.widths(
                 labels,
                 [drawn[row.id] for row in self._rows],
-                max((_widest(_field_label(c)) for c in self._columns), default=0),
+                max((widest(field_label(c)) for c in self._columns), default=0),
+                *self._room(),
             )
             for label, row, width in zip(labels, self._rows, widths):
                 table.add_column(label, key=str(row.id), width=width)
             for index, column in enumerate(self._columns):
                 cells = [drawn[row.id][index] for row in self._rows]
-                height = self._row_height(cells, widths)
-                cells = self._centre(cells, widths, height)
+                height = self.view.row_height(cells, widths)
+                cells = self.view.centre(cells, widths, height)
                 table.add_row(
                     *cells,
                     height=height,
                     key=str(column.id),
-                    label=_centred(_field_label(column), height),
+                    label=centred(field_label(column), height),
                 )
         else:
             drawn = {
                 column.id: [
-                    self._cell(column, row.values.get(column.id)) for row in self._rows
+                    self.view.cell(column, row.values.get(column.id)) for row in self._rows
                 ]
                 for column in self._columns
             }
-            labels = [_field_label(column) for column in self._columns]
-            widths = self._widths(
+            labels = [field_label(column) for column in self._columns]
+            widths = self.view.widths(
                 labels,
                 [drawn[column.id] for column in self._columns],
                 len(str(len(self._rows))),
+                *self._room(),
             )
             for label, column, width in zip(labels, self._columns, widths):
                 table.add_column(label, key=str(column.id), width=width)
             for number, row in enumerate(self._rows, start=1):
                 cells = [drawn[column.id][number - 1] for column in self._columns]
-                height = self._row_height(cells, widths)
-                cells = self._centre(cells, widths, height)
+                height = self.view.row_height(cells, widths)
+                cells = self.view.centre(cells, widths, height)
                 table.add_row(
                     *cells,
                     height=height,
                     key=str(row.id),
-                    label=_centred(Text(str(number), "dim"), height),
+                    label=centred(Text(str(number), "dim"), height),
                 )
 
         if self._rows and self._columns:
@@ -311,70 +287,16 @@ class GridlyApp(App[None]):
             )
         self._update_status()
 
-    def _capped(self) -> bool:
-        """Is anything holding the columns back?"""
-        return self.column_width != "unlimited"
 
-    def _wrapping(self) -> bool:
-        """Wrapping needs a cap to wrap against, so both settings have to agree."""
-        return self.overflow == "wrap" and self._capped()
 
-    def _cell(self, column: Column, value: Any) -> Text:
-        """A value drawn for the row height that is in force."""
-        if self._wrapping():
-            # The row will be grown to fit this, so nothing is squeezed or cut.
-            return _render(column, value, MAX_WRAP_LINES)
-        height = ROW_SIZES[self.row_size]
-        cell = _centred(_render(column, value, height), height)
-        if self._capped():
-            cell.no_wrap = True
-            cell.overflow = "ellipsis"
-        return cell
 
-    def _row_height(self, cells: list[Text], widths: list[int | None]) -> int:
-        """How many lines a row needs once its values have wrapped."""
-        if not self._wrapping():
-            return ROW_SIZES[self.row_size]
-        needed = max(
-            (_lines_needed(cell, width) for cell, width in zip(cells, widths)),
-            default=1,
-        )
-        return min(max(1, needed), MAX_WRAP_LINES)
 
-    def _centre(
-        self, cells: list[Text], widths: list[int | None], height: int
-    ) -> list[Text]:
-        """Sit each value in the middle of the row its tallest neighbour set."""
-        if not self._wrapping():
-            return cells  # _cell has already centred these against a fixed height
-        return [
-            _centred(cell, height, _lines_needed(cell, width))
-            for cell, width in zip(cells, widths)
-        ]
 
-    def _widths(
-        self, labels: list[Text], columns: list[list[Text]], row_label: int
-    ) -> list[int | None]:
-        """How wide each column gets. A cap never pads a narrow column out."""
-        naturals = [
-            max([_widest(label)] + [_widest(cell) for cell in cells] + [1])
-            for label, cells in zip(labels, columns)
-        ]
-        if self.column_width == "unlimited":
-            return [None] * len(naturals)
-        if self.column_width != "fit":
-            cap = COLUMN_CAPS[self.column_width]
-            return [min(natural, cap) for natural in naturals]
 
-        # Everything the table spends besides the columns themselves.
+    def _room(self) -> tuple[int, int]:
+        """How much width there is to share out, and what each column costs."""
         table = self.table
-        available = table.content_size.width or table.size.width
-        gutters = 2 * table.cell_padding
-        budget = available - (row_label + gutters) - gutters * len(naturals)
-        if available <= 0 or budget <= 0 or sum(naturals) <= budget:
-            return naturals
-        cap = _fair_cap(naturals, budget, MIN_FIT_WIDTH)
-        return [min(natural, cap) for natural in naturals]
+        return table.content_size.width or table.size.width, 2 * table.cell_padding
 
     def _update_status(self) -> None:
         if self._cycle_timer is not None:
@@ -382,7 +304,7 @@ class GridlyApp(App[None]):
         columns, rows = self.sheet.counts()
         column = self.current_column()
         shape = f"{rows} {_plural(rows, 'row')} × {columns} {_plural(columns, 'column')}"
-        if self.flipped:
+        if self.view.flipped:
             shape += ", flipped"
         detail = ""
         region = self._selection_region()
@@ -475,13 +397,13 @@ class GridlyApp(App[None]):
         row, column = self._cell_at(coordinate)
         if row is None or column is None:
             return
-        text = self._cell(column, row.values.get(column.id))
-        if self._wrapping():
+        text = self.view.cell(column, row.values.get(column.id))
+        if self.view.wrapping:
             table = self.table
-            text = _centred(
+            text = centred(
                 text,
                 table.ordered_rows[coordinate.row].height,
-                _lines_needed(text, table.ordered_columns[coordinate.column].width),
+                lines_needed(text, table.ordered_columns[coordinate.column].width),
             )
         if selected:
             text = text.copy()
@@ -518,41 +440,35 @@ class GridlyApp(App[None]):
     def action_flip(self) -> None:
         """Swap which way the sheet is drawn, keeping the cursor on the same cell."""
         record, field = self._indices()
-        self.flipped = not self.flipped
+        self.view.flipped = not self.view.flipped
         self.reload(self._coordinate(record, field))
         self.notify(
-            "Records run across the screen." if self.flipped else "Back to normal."
+            "Records run across the screen." if self.view.flipped else "Back to normal."
         )
 
     def action_cycle_column_width(self) -> None:
         """Small, large, or let columns take whatever they need."""
-        self.column_width = COLUMN_WIDTHS[
-            (COLUMN_WIDTHS.index(self.column_width) + 1) % len(COLUMN_WIDTHS)
-        ]
-        config.save(column_width=self.column_width)
+        self.view.cycle_column_width()
         self.reload()
-        self._show_cycle("column width", COLUMN_WIDTHS, self.column_width)
+        self._show_cycle("column width", COLUMN_WIDTHS, self.view.column_width)
 
     def action_toggle_overflow(self) -> None:
         """Wrap a too-long value over the row, or cut it with an ellipsis."""
-        self.overflow = OVERFLOWS[(OVERFLOWS.index(self.overflow) + 1) % len(OVERFLOWS)]
-        config.save(overflow=self.overflow)
+        self.view.cycle_overflow()
         self.reload()
-        self._show_cycle("long values", OVERFLOWS, self.overflow)
-        if not self._capped():
+        self._show_cycle("long values", OVERFLOWS, self.view.overflow)
+        if not self.view.capped:
             self.notify(
-                f"Long values {self.overflow} — but nothing is capped, so press w first.",
+                f"Long values {self.view.overflow} — but nothing is capped, so press w first.",
                 severity="warning",
             )
 
     def action_toggle_row_size(self) -> None:
         """Swap the row height for the other one."""
-        sizes = list(ROW_SIZES)
-        self.row_size = sizes[(sizes.index(self.row_size) + 1) % len(sizes)]
-        config.save(row_size=self.row_size)
+        self.view.cycle_row_size()
         self.reload()
-        self._show_cycle("row height", tuple(ROW_SIZES), self.row_size)
-        if self._wrapping():
+        self._show_cycle("row height", tuple(ROW_SIZES), self.view.row_size)
+        if self.view.wrapping:
             self.notify(
                 "Wrapping is on, so rows grow to fit whatever they hold."
                 " Press W for a fixed height.",
@@ -604,7 +520,7 @@ class GridlyApp(App[None]):
     def _write(self, row: Row, column: Column, value: Any) -> None:
         self.sheet.set_cell(row.id, column.id, value)
         row.values[column.id] = value
-        if self._wrapping():
+        if self.view.wrapping:
             # The value may need a different number of lines than the row has,
             # and only a redraw can change that. Nothing structural moved, so
             # the selection is put back afterwards.
@@ -686,7 +602,7 @@ class GridlyApp(App[None]):
         values = [display(c.type, row.values.get(c.id)) for c in self._columns]
         # Copy the shape that is on screen: a record reads down the screen when
         # the view is flipped, and paste reads it back the same way.
-        block = [[value] for value in values] if self.flipped else [values]
+        block = [[value] for value in values] if self.view.flipped else [values]
         self._copy(format_block(block), f"row {self._rows.index(row) + 1}")
 
     def _copy(self, text: str, what: str) -> None:
@@ -749,15 +665,15 @@ class GridlyApp(App[None]):
         # A block always spills right and down the screen, so which of its axes
         # is records and which is columns depends on which way the grid is drawn.
         record_span, field_span = (
-            (across, len(block)) if self.flipped else (len(block), across)
+            (across, len(block)) if self.view.flipped else (len(block), across)
         )
         columns = self._columns[field_start : field_start + field_span]
         clipped = field_span - len(columns)
         new_rows = max(0, record_start + record_span - len(self._rows))
 
         def cell(record_offset: int, field_offset: int) -> str:
-            line = block[field_offset if self.flipped else record_offset]
-            index = record_offset if self.flipped else field_offset
+            line = block[field_offset if self.view.flipped else record_offset]
+            index = record_offset if self.view.flipped else field_offset
             return line[index] if index < len(line) else ""
 
         plan = [
@@ -920,29 +836,7 @@ class GridlyApp(App[None]):
         self.sheet.close()
 
 
-def _field_label(column: Column) -> Text:
-    return Text.assemble((column.name, "bold"), (f"  {column.type.tag}", "dim"))
 
-
-def _fair_cap(naturals: list[int], budget: int, minimum: int) -> int:
-    """The widest every column may be so that together they fit the budget.
-
-    Narrow columns are paid in full and the room they leave is shared out among
-    the wide ones, so squeezing costs the columns that are hogging the screen.
-    """
-    remaining = budget
-    for index, width in enumerate(sorted(naturals)):
-        left = len(naturals) - index
-        if width * left <= remaining:
-            remaining -= width
-        else:
-            return max(minimum, remaining // left)
-    return max(naturals, default=minimum)
-
-
-def _widest(text: Text) -> int:
-    """How many columns the longest line of a value needs."""
-    return max((cell_len(line) for line in text.plain.split("\n")), default=0)
 
 
 def _plural(count: int, word: str) -> str:
@@ -956,54 +850,8 @@ def _short_path(path: Path) -> str:
         return str(path)
 
 
-def _fit(text: str, lines: int) -> Text:
-    """Lay a value out over the lines its row has.
-
-    Whatever is left over is squeezed onto the last of them, every break it
-    swallows marked with a dim ⏎, so even a one-line row shows the whole value.
-    """
-    parts = text.replace("\t", " ").split("\n")
-    head, tail = parts[: lines - 1], parts[lines - 1 :]
-    fitted = Text("\n".join(head))
-    if not tail:
-        return fitted
-    if head:
-        fitted.append("\n")
-    fitted.append(tail[0])
-    for part in tail[1:]:
-        fitted.append(" ⏎ ", "dim")
-        fitted.append(part)
-    return fitted
 
 
-def _lines_needed(cell: Text, width: int | None) -> int:
-    """How many screen lines a value takes once it has wrapped to `width`."""
-    return sum(
-        max(1, ceil(cell_len(line) / max(1, width or 1)))
-        for line in cell.plain.split("\n")
-    )
-
-
-def _centred(cell: Text, height: int, lines: int | None = None) -> Text:
-    """Sit a value in the middle of its row rather than at the top of it."""
-    occupied = cell.plain.count("\n") + 1 if lines is None else lines
-    above = (height - occupied) // 2
-    return Text("\n" * above) + cell if above > 0 else cell
-
-
-def _render(column: Column, value: Any, lines: int) -> Text:
-    """How a value looks inside the grid."""
-    if value is None:
-        return Text("·", "dim")
-    if column.type is ColumnType.BOOLEAN:
-        return Text("✓", "green") if value else Text("✗", "red dim")
-    if column.type is ColumnType.NUMBER:
-        return Text(display(column.type, value), "cyan")
-    if column.type is ColumnType.DATE:
-        return Text(display(column.type, value), "magenta")
-    if column.type is ColumnType.SELECT:
-        return Text(display(column.type, value), color_style(column.color(value)))
-    return _fit(display(column.type, value), lines)
 
 
 def main(argv: list[str] | None = None) -> int:
