@@ -92,15 +92,6 @@ async def main():
         print("           :", {str(sp.style) for sp in edited.spans} or "NOT PAINTED")
         assert edited.spans, "editing must not wipe the selection highlight"
 
-        # --- selection follows the flipped view, and flipping drops it
-        await pilot.press("escape"); await pilot.pause()
-        await pilot.press("v"); await pilot.pause()
-        assert not app._selected, "flipping starts fresh"
-        t.cursor_coordinate = Coordinate(0, 0); await pilot.pause()
-        await pilot.press("shift+right", "shift+down"); await pilot.pause()
-        await pilot.press("y"); await pilot.pause()
-        print("flipped y  :", parse_block(app._clipboard))
-        assert parse_block(app._clipboard) == [["Milk", "Bread"], ["yes", "no"]]
 
         # --- and what it copies pastes back unchanged
         before = [[r.values.get(c.id) for c in app.sheet.columns()] for r in app.sheet.rows()]

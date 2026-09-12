@@ -1,4 +1,4 @@
-"""The settings page: every way of looking at a sheet, in one place."""
+"""The settings page: how a sheet is drawn, all in one place."""
 
 from __future__ import annotations
 
@@ -42,15 +42,6 @@ SETTINGS = [
         [
             ("small — one line", "small"),
             ("large — three lines", "large"),
-        ],
-    ),
-    (
-        "flipped",
-        "Layout",
-        "Which way round the grid runs. Not remembered between runs.",
-        [
-            ("normal — a row per record", False),
-            ("flipped — a column per record", True),
         ],
     ),
 ]

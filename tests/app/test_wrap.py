@@ -106,11 +106,6 @@ async def main():
         assert painted.spans, "and it should still be painted"
         await pilot.press("escape"); await pilot.pause()
 
-        # --- and it works in the flipped view
-        await pilot.press("v"); await pilot.pause()
-        print("flipped              :", heights(app))
-        assert max(heights(app)) > 1
-        await pilot.press("v"); await pilot.pause()
 
         # --- turning wrapping off puts row_size back in charge
         await pilot.press("W"); await pilot.pause()

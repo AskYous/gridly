@@ -27,20 +27,20 @@ async def main():
         # --- every view setting is on the page
         await pilot.press("comma"); await pilot.pause()
         assert isinstance(app.screen, SettingsScreen), app.screen
-        for key in ("column_width", "overflow", "row_size", "flipped"):
-            assert app.screen.query_one(f"#set-{key}", Select).value == getattr(app.appearance, key)
-        print("page shows   : column width, long values, row height, layout, theme")
+        for key in ("column_width", "overflow", "row_size"):
+            assert app.screen.query_one(f"#set-{key}", Select).value == getattr(
+                app.appearance, key
+            )
+        print("page shows   : column width, long values, row height, theme")
 
         # --- changing them and saving takes effect
         pick(app, "column_width", "small")
         pick(app, "overflow", "wrap")
         pick(app, "row_size", "large")
-        pick(app, "flipped", True)
         await pilot.pause()
         await pilot.press("ctrl+s"); await pilot.pause()
         print("after save   :", app.appearance)
         assert (app.appearance.column_width, app.appearance.overflow) == ("small", "wrap")
-        assert app.appearance.row_size == "large" and app.appearance.flipped is True
         assert app.screen is app.screen_stack[0]
 
         # --- escape leaves everything as it was

@@ -80,7 +80,6 @@ class GridlyApp(App[None]):
         Binding("shift+up", "extend(-1, 0)", "Select up", show=False),
         Binding("shift+down", "extend(1, 0)", "Select down", show=False),
         Binding("escape", "clear_selection", "Drop selection", show=False),
-        Binding("v", "flip", "Flip", show=False),
         Binding("s", "toggle_row_size", "Size", show=False),
         Binding("w", "cycle_column_width", "Width", show=False),
         Binding("W", "toggle_overflow", "Wrap", show=False),
@@ -126,9 +125,8 @@ class GridlyApp(App[None]):
         ("export", "Export to CSV", "Write the sheet out as a file", True),
         ("undo", "Undo", "Take back the last change", True),
         ("redo", "Redo", "Put back what undo took away", True),
-        ("settings", "Settings", "Width, wrapping, row height, layout and theme", True),
-        ("flip", "Flip the view", "Draw records across the screen instead of down", True),
         ("toggle_row_size", "Toggle row height", "Between one line and three", True),
+        ("settings", "Settings", "Width, wrapping, row height and theme", True),
         ("cycle_column_width", "Cycle column width", "Large, fit to the screen, small, or uncapped", True),
         ("toggle_overflow", "Toggle wrapping", "A long value wraps over the row, or ends in an ellipsis", True),
         ("help", "Show Gridly's keys", "The keyboard reference", True),
@@ -154,8 +152,6 @@ class GridlyApp(App[None]):
         self.sub_title = _short_path(self.sheet.path)
         self._columns: list[Column] = []
         self._rows: list[Row] = []
-        # Draw records down the screen (normal) or across it (flipped). This is
-        # only ever a way of looking at the sheet — the data is the same either way.
         self.appearance = Appearance.load()
         # A keyboard selection: where it started and which cells it covers now.
         # Cursor moves we made ourselves are counted, because the CellHighlighted
@@ -205,16 +201,6 @@ class GridlyApp(App[None]):
     def table(self) -> DataTable:
         return self.query_one("#grid", DataTable)
 
-    # ------------------------------------------------------- grid <-> data
-
-    def _coordinate(self, record: int, field: int) -> Coordinate:
-        """Where a given record and column sit on screen."""
-        return Coordinate(field, record) if self.appearance.flipped else Coordinate(record, field)
-
-    def _indices(self, coordinate: Coordinate | None = None) -> tuple[int, int]:
-        """The record and column a screen position points at."""
-        at = self.table.cursor_coordinate if coordinate is None else coordinate
-        return (at.column, at.row) if self.appearance.flipped else (at.row, at.column)
 
     # ---------------------------------------------------------------- drawing
 
@@ -229,73 +215,39 @@ class GridlyApp(App[None]):
         self._columns = self.sheet.columns()
         self._rows = self.sheet.rows()
 
-        if self.appearance.flipped:
-            # A grid column is a record: size it from that record's own values.
-            drawn = {
-                row.id: [
-                    self.appearance.cell(column, row.values.get(column.id))
-                    for column in self._columns
-                ]
+        drawn = {
+            column.id: [
+                self.appearance.cell(column, row.values.get(column.id))
                 for row in self._rows
-            }
-            labels = [Text(str(n), "dim") for n in range(1, len(self._rows) + 1)]
-            widths = self.appearance.widths(
-                labels,
-                [drawn[row.id] for row in self._rows],
-                max((widest(field_label(c)) for c in self._columns), default=0),
-                *self._room(),
+            ]
+            for column in self._columns
+        }
+        labels = [field_label(column) for column in self._columns]
+        widths = self.appearance.widths(
+            labels,
+            [drawn[column.id] for column in self._columns],
+            len(str(len(self._rows))),
+            *self._room(),
+        )
+        for label, column, width in zip(labels, self._columns, widths):
+            table.add_column(label, key=str(column.id), width=width)
+        for number, row in enumerate(self._rows, start=1):
+            cells = [drawn[column.id][number - 1] for column in self._columns]
+            height = self.appearance.row_height(cells, widths)
+            cells = self.appearance.centre(cells, widths, height)
+            table.add_row(
+                *cells,
+                height=height,
+                key=str(row.id),
+                label=centred(Text(str(number), "dim"), height),
             )
-            for label, row, width in zip(labels, self._rows, widths):
-                table.add_column(label, key=str(row.id), width=width)
-            for index, column in enumerate(self._columns):
-                cells = [drawn[row.id][index] for row in self._rows]
-                height = self.appearance.row_height(cells, widths)
-                cells = self.appearance.centre(cells, widths, height)
-                table.add_row(
-                    *cells,
-                    height=height,
-                    key=str(column.id),
-                    label=centred(field_label(column), height),
-                )
-        else:
-            drawn = {
-                column.id: [
-                    self.appearance.cell(column, row.values.get(column.id)) for row in self._rows
-                ]
-                for column in self._columns
-            }
-            labels = [field_label(column) for column in self._columns]
-            widths = self.appearance.widths(
-                labels,
-                [drawn[column.id] for column in self._columns],
-                len(str(len(self._rows))),
-                *self._room(),
-            )
-            for label, column, width in zip(labels, self._columns, widths):
-                table.add_column(label, key=str(column.id), width=width)
-            for number, row in enumerate(self._rows, start=1):
-                cells = [drawn[column.id][number - 1] for column in self._columns]
-                height = self.appearance.row_height(cells, widths)
-                cells = self.appearance.centre(cells, widths, height)
-                table.add_row(
-                    *cells,
-                    height=height,
-                    key=str(row.id),
-                    label=centred(Text(str(number), "dim"), height),
-                )
 
         if self._rows and self._columns:
-            record, field = self._indices(previous)
-            table.cursor_coordinate = self._coordinate(
+            record, field = previous.row, previous.column
+            table.cursor_coordinate = Coordinate(
                 min(record, len(self._rows) - 1), min(field, len(self._columns) - 1)
             )
         self._update_status()
-
-
-
-
-
-
 
     def _room(self) -> tuple[int, int]:
         """How much width there is to share out, and what each column costs."""
@@ -308,8 +260,6 @@ class GridlyApp(App[None]):
         columns, rows = self.sheet.counts()
         column = self.current_column()
         shape = f"{rows} {_plural(rows, 'row')} × {columns} {_plural(columns, 'column')}"
-        if self.appearance.flipped:
-            shape += ", flipped"
         detail = ""
         region = self._selection_region()
         if region is not None:
@@ -353,15 +303,15 @@ class GridlyApp(App[None]):
     # -------------------------------------------------------------- selection
 
     def current_column(self) -> Column | None:
-        _, field = self._indices()
+        field = self.table.cursor_coordinate.column
         return self._columns[field] if 0 <= field < len(self._columns) else None
 
     def current_row(self) -> Row | None:
-        record, _ = self._indices()
+        record = self.table.cursor_coordinate.row
         return self._rows[record] if 0 <= record < len(self._rows) else None
 
     def _cell_at(self, coordinate: Coordinate) -> tuple[Row | None, Column | None]:
-        record, field = self._indices(coordinate)
+        record, field = coordinate.row, coordinate.column
         row = self._rows[record] if 0 <= record < len(self._rows) else None
         column = self._columns[field] if 0 <= field < len(self._columns) else None
         return row, column
@@ -462,14 +412,6 @@ class GridlyApp(App[None]):
             done,
         )
 
-    def action_flip(self) -> None:
-        """Swap which way the sheet is drawn, keeping the cursor on the same cell."""
-        record, field = self._indices()
-        self.appearance.flipped = not self.appearance.flipped
-        self.reload(self._coordinate(record, field))
-        self.notify(
-            "Records run across the screen." if self.appearance.flipped else "Back to normal."
-        )
 
     def action_cycle_column_width(self) -> None:
         """Small, large, or let columns take whatever they need."""
@@ -625,10 +567,7 @@ class GridlyApp(App[None]):
         if row is None or not self._columns:
             return
         values = [display(c.type, row.values.get(c.id)) for c in self._columns]
-        # Copy the shape that is on screen: a record reads down the screen when
-        # the view is flipped, and paste reads it back the same way.
-        block = [[value] for value in values] if self.appearance.flipped else [values]
-        self._copy(format_block(block), f"row {self._rows.index(row) + 1}")
+        self._copy(format_block([values]), f"row {self._rows.index(row) + 1}")
 
     def _copy(self, text: str, what: str) -> None:
         self.copy_to_clipboard(text)  # OSC 52 — the one that works over ssh
@@ -685,21 +624,17 @@ class GridlyApp(App[None]):
             self.notify("Add a column first (c).", severity="warning")
             return
 
-        record_start, field_start = self._indices()
-        across = max(len(line) for line in block)
-        # A block always spills right and down the screen, so which of its axes
-        # is records and which is columns depends on which way the grid is drawn.
-        record_span, field_span = (
-            (across, len(block)) if self.appearance.flipped else (len(block), across)
-        )
+        at = self.table.cursor_coordinate
+        record_start, field_start = at.row, at.column
+        record_span = len(block)
+        field_span = max(len(line) for line in block)
         columns = self._columns[field_start : field_start + field_span]
         clipped = field_span - len(columns)
         new_rows = max(0, record_start + record_span - len(self._rows))
 
         def cell(record_offset: int, field_offset: int) -> str:
-            line = block[field_offset if self.appearance.flipped else record_offset]
-            index = record_offset if self.appearance.flipped else field_offset
-            return line[index] if index < len(line) else ""
+            line = block[record_offset]
+            return line[field_offset] if field_offset < len(line) else ""
 
         plan = [
             (record_start + record_offset, column, cell(record_offset, field_offset))
@@ -748,17 +683,18 @@ class GridlyApp(App[None]):
             self.notify("Add a column first (c).", severity="warning")
             return
         self.sheet.add_row()
-        _, field = self._indices()
-        self.reload(self._coordinate(len(self._rows), field))
+        field = self.table.cursor_coordinate.column
+        self.reload(Coordinate(len(self._rows), field))
 
     def action_insert_row(self) -> None:
         if not self._columns:
             self.notify("Add a column first (c).", severity="warning")
             return
         row = self.current_row()
-        record, field = self._indices()
+        at = self.table.cursor_coordinate
+        record, field = at.row, at.column
         self.sheet.add_row(after_position=row.position if row else None)
-        self.reload(self._coordinate(record + 1, field))
+        self.reload(Coordinate(record + 1, field))
 
     def action_undo(self) -> None:
         label = self.sheet.undo()
@@ -783,9 +719,10 @@ class GridlyApp(App[None]):
             self.notify("Nothing to duplicate yet.", severity="warning")
             return
         number = self._rows.index(row) + 1
-        record, field = self._indices()
+        at = self.table.cursor_coordinate
+        record, field = at.row, at.column
         self.sheet.duplicate_row(row.id)
-        self.reload(self._coordinate(record + 1, field))
+        self.reload(Coordinate(record + 1, field))
         self.notify(f"Row {number} copied to row {number + 1}.")
 
     def action_delete_row(self) -> None:
@@ -804,9 +741,9 @@ class GridlyApp(App[None]):
             if result is None:
                 return
             name, coltype, options, colors = result
-            record, _ = self._indices()
+            record = self.table.cursor_coordinate.row
             self.sheet.add_column(name, coltype, options, colors)
-            self.reload(self._coordinate(record, len(self._columns)))
+            self.reload(Coordinate(record, len(self._columns)))
             self.notify(f"Added column {name!r} ({coltype.label}).")
 
         self.push_screen(ColumnScreen(), done)
@@ -848,9 +785,10 @@ class GridlyApp(App[None]):
         column = self.current_column()
         if column is None:
             return
-        record, field = self._indices()
+        at = self.table.cursor_coordinate
+        record, field = at.row, at.column
         if self.sheet.move_column(column.id, offset):
-            self.reload(self._coordinate(record, field + offset))
+            self.reload(Coordinate(record, field + offset))
 
     # ------------------------------------------------------------------ misc
 
@@ -859,10 +797,6 @@ class GridlyApp(App[None]):
 
     def on_unmount(self) -> None:
         self.sheet.close()
-
-
-
-
 
 def _plural(count: int, word: str) -> str:
     return word if count == 1 else word + "s"
@@ -873,11 +807,6 @@ def _short_path(path: Path) -> str:
         return "~/" + str(path.relative_to(Path.home()))
     except ValueError:
         return str(path)
-
-
-
-
-
 
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)

@@ -63,13 +63,6 @@ async def main():
         assert isinstance(app.screen, ColumnScreen), app.screen
         await pilot.press("escape"); await pilot.pause()
 
-        # --- one that changes state
-        await run(app, pilot, "Flip the view")
-        print("flipped          :", app.appearance.flipped)
-        assert app.appearance.flipped
-        await run(app, pilot, "Flip the view")
-        assert not app.appearance.flipped
-
         # --- one that adds data
         rows_before = len(app.sheet.rows())
         await run(app, pilot, "Add row")

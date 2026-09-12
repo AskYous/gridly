@@ -65,13 +65,9 @@ async def main():
         print("uncapped     : no_wrap =", cell.no_wrap)
         assert not cell.no_wrap
 
-        # the flipped view caps its columns too
         while app.appearance.column_width != "small":
             await pilot.press("w"); await pilot.pause()
-        await pilot.press("v"); await pilot.pause()
-        print("flipped      :", {str(c.label): c.width for c in t.ordered_columns})
         assert all(c.width <= COLUMN_CAPS["small"] for c in t.ordered_columns)
-        await pilot.press("v"); await pilot.pause()
         print("saved        :", config.load())
 
     app2 = GridlyApp(path)

@@ -61,13 +61,10 @@ async def main():
         print("empty copy  :", rows[4])
         assert all(v is None for v in rows[4])
 
-        # --- it survives a reopen, in order
-        order_before = [r[0] for r in data(app)]
-        await pilot.press("v"); await pilot.pause()      # and works flipped
+        # --- the cursor lands on the copy, ready to edit it
         t.cursor_coordinate = Coordinate(0, 0); await pilot.pause()
         await pilot.press("D"); await pilot.pause()
-        print("flipped     :", [r[0] for r in data(app)])
-        assert t.cursor_coordinate.column == 1, "the cursor follows the copy across"
+        assert t.cursor_coordinate.row == 1, "the cursor follows the copy"
 
     reopened = Sheet(path)
     cols = reopened.columns()

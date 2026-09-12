@@ -107,7 +107,6 @@ class HelpScreen(ModalScreen[None]):
             ("w", "Width: large, fit, small, uncapped"),
             ("W", "Wrap long values, or cut with …"),
             ("s", "Row height: one line or three"),
-            ("v", "Flip: records across, not down"),
             (",", "Settings: all of the above in one page"),
             ("t", "Change the colour theme"),
         ]),

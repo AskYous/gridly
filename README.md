@@ -106,7 +106,6 @@ where it can't, telling you how many it dropped.
 | `f`         | open the whole row as a form                  |
 | `w`         | column width: large, fit, small, unlimited    |
 | `W`         | long values wrap, or end in an ellipsis       |
-| `v`         | flip the view: records across, not down       |
 | `s`         | row size: small or large                      |
 | `backspace` | clear the cell                                |
 | `a`         | add a row at the bottom                       |
@@ -124,7 +123,7 @@ where it can't, telling you how many it dropped.
 | `Y`         | copy the whole row, tab separated             |
 | `E`         | export the sheet to a CSV file                |
 | `cmd/ctrl+v`| paste cells copied from a spreadsheet         |
-| `,`         | settings: width, wrapping, height, layout, theme |
+| `,`         | settings: width, wrapping, row height, theme  |
 | `t`         | change the colour theme                       |
 | `ctrl+p`    | command palette — every command, searchable   |
 | `?`         | help                                          |
@@ -203,10 +202,6 @@ The file is UTF-8 with a byte order mark, which is what Excel needs to read
 non-ASCII text without garbling it and which Sheets, pandas and everything else
 accept happily.
 
-Unlike copying, export ignores the flipped view. The clipboard is for grabbing
-what you can see; a CSV is data going to another tool, and every one of those
-tools expects a header row with records underneath.
-
 ## Undo
 
 `u` takes back the last change and `U` puts it back, forty deep. Everything
@@ -224,7 +219,7 @@ what is on disk is what you have.
 
 ## Settings
 
-`w`, `W`, `s`, `v` and `t` each change one thing and are quick once you know
+`w`, `W`, `s` and `t` each change one thing and are quick once you know
 them. `,` opens all of them on one page instead, each with a line saying what
 it does and what the choices mean, plus a button that puts everything back to
 how it started. The theme changes as you move through the list so you can see
@@ -267,28 +262,10 @@ row is the same height whatever is in it:
 Both settings are remembered in `~/.config/gridly/config.json` along with the
 theme and row height.
 
-## Flipping the view
-
-A sheet with many columns and few rows means scrolling sideways to read one
-record. `v` turns the grid on its side: column names run down the left and each
-record becomes a column. It is only a way of drawing the sheet — the file is
-untouched, `v` puts it back, and every launch starts the normal way round.
-
-Nothing else changes meaning. `d` still deletes the record under the cursor
-even though that record is now a column on screen, `c` still adds a column even
-though it appears as a new row, and the status line says `flipped` so you know
-which way you are looking.
-
-Copying and pasting follow what is on screen. Flipped, `Y` copies a record as a
-column of lines rather than one line, and a pasted block still spills right and
-down the screen — so a block copied from the flipped view pastes back exactly
-as it looked. The one asymmetry is inherent: records are the axis that can
-grow, so pasting past the last record adds records, while a block that runs
-past the last column is still clipped rather than inventing columns.
 
 ## Row size
 
-`s` swaps between two row heights, small and large. Like flipping, it only
+`s` swaps between two row heights, small and large. It only
 changes the drawing: nothing is written to the sheet, and the height is
 remembered in the config so the next launch opens the way you left it.
 

@@ -50,19 +50,13 @@ MAX_WRAP_LINES = 12
 class Appearance:
     """How a sheet looks. Never changes what is in it, or which of it is shown."""
 
-    #: Records down the screen (normal) or across it.
-    flipped: bool = False
     row_size: str = DEFAULT_ROW_SIZE
     column_width: str = DEFAULT_COLUMN_WIDTH
     overflow: str = DEFAULT_OVERFLOW
 
     @classmethod
     def load(cls) -> Appearance:
-        """The settings from last time, ignoring anything unrecognisable.
-
-        `flipped` is deliberately not among them: it is a quick look at a wide
-        sheet, not a preference.
-        """
+        """The settings from last time, ignoring anything unrecognisable."""
         saved = config.load()
         view = cls()
         if saved.get("row_size") in ROW_SIZES:

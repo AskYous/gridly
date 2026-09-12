@@ -62,17 +62,6 @@ async def main():
         print("overwrote  :", target.read_bytes() == before)
         assert target.read_bytes() == before
 
-        # --- the flipped view is a view: the CSV is still one record per line
-        await pilot.press("v"); await pilot.pause()
-        assert app.appearance.flipped
-        other = out / "flipped.csv"
-        await pilot.press("E"); await pilot.pause()
-        field = app.screen.query_one("#path", Input)
-        field.value = str(other)
-        await pilot.press("enter"); await pilot.pause()
-        print("flipped csv matches normal:", other.read_bytes() == before)
-        assert other.read_bytes() == before
-        await pilot.press("v"); await pilot.pause()
 
         # --- an empty name is refused, a bad directory reports instead of crashing
         await pilot.press("E"); await pilot.pause()

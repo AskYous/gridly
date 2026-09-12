@@ -151,12 +151,6 @@ def test_unreadable_settings_fall_back_to_the_defaults(tmp_path, monkeypatch):
     assert Appearance.load() == Appearance()
 
 
-def test_which_way_round_the_grid_runs_is_not_remembered(tmp_path, monkeypatch):
-    """It is a quick look at a wide sheet, not a preference."""
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    view = Appearance(flipped=True)
-    view.save()
-    assert Appearance.load().flipped is False
 
 
 # --------------------------------------------------------------- drawing

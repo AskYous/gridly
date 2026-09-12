@@ -65,13 +65,6 @@ async def main():
         print("at 24 wide   :", widths)
         assert min(widths.values()) >= min(MIN_FIT_WIDTH, 6), widths
 
-        # --- fit is remembered, and works in the flipped view
-        await pilot.resize_terminal(90, 20); await pilot.pause(); await pilot.pause()
-        await pilot.press("v"); await pilot.pause()
-        used, available, widths = spread(app)
-        print("flipped      :", widths, "-> uses", used, "of", available)
-        assert used <= available
-        await pilot.press("v"); await pilot.pause()
 
     app2 = GridlyApp(path)
     async with app2.run_test(size=(80, 20)) as pilot:
