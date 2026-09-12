@@ -1,5 +1,7 @@
 # Gridly
 
+[![tests](https://github.com/AskYous/gridly/actions/workflows/tests.yml/badge.svg)](https://github.com/AskYous/gridly/actions/workflows/tests.yml)
+
 <img width="1141" height="794" alt="image" src="https://github.com/user-attachments/assets/a4f05501-15f3-4d92-933d-9ca2a58fd7ca" />
 
 A terminal spreadsheet with typed columns. Every change is written straight to a
@@ -28,6 +30,9 @@ of them, and they take about forty seconds between them.
 
 They share a process, so `tests/conftest.py` points the config and the
 clipboard somewhere harmless before any of them run.
+
+Both halves run on every push and pull request, against Python 3.10, 3.12 and
+3.13.
 
 ## The screenshot
 
