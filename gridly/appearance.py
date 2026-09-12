@@ -3,6 +3,9 @@
 Column width, row height, wrapping and which way round the grid runs all feed
 into the same few measurements, so they live together rather than being spread
 between the app and a pile of loose helpers.
+
+None of this decides *which* records are shown or in what order — that is what
+a view is, and it is a separate thing.
 """
 
 from __future__ import annotations
@@ -44,8 +47,8 @@ MAX_WRAP_LINES = 12
 
 
 @dataclass
-class View:
-    """A way of looking at a sheet. Never changes what is in it."""
+class Appearance:
+    """How a sheet looks. Never changes what is in it, or which of it is shown."""
 
     #: Records down the screen (normal) or across it.
     flipped: bool = False
@@ -54,7 +57,7 @@ class View:
     overflow: str = DEFAULT_OVERFLOW
 
     @classmethod
-    def load(cls) -> View:
+    def load(cls) -> Appearance:
         """The settings from last time, ignoring anything unrecognisable.
 
         `flipped` is deliberately not among them: it is a quick look at a wide

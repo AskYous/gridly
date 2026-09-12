@@ -8,14 +8,14 @@ from rich.text import Text
 
 from gridly.coltypes import ColumnType
 from gridly.store import Column
-from gridly.view import (
+from gridly.appearance import (
     COLUMN_CAPS,
     COLUMN_WIDTHS,
     MAX_WRAP_LINES,
     MIN_FIT_WIDTH,
     OVERFLOWS,
     ROW_SIZES,
-    View,
+    Appearance,
     centred,
     fair_cap,
     fit,
@@ -122,7 +122,7 @@ def test_no_columns_at_all():
 # -------------------------------------------------------------- the settings
 
 def test_the_defaults_are_all_real_choices():
-    view = View()
+    view = Appearance()
     assert view.column_width in COLUMN_WIDTHS
     assert view.overflow in OVERFLOWS
     assert view.row_size in ROW_SIZES
@@ -130,17 +130,17 @@ def test_the_defaults_are_all_real_choices():
 
 def test_cycling_comes_back_round(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    view = View()
+    view = Appearance()
     for _ in COLUMN_WIDTHS:
         view.cycle_column_width()
-    assert view.column_width == View().column_width
+    assert view.column_width == Appearance().column_width
 
 
 def test_a_setting_is_written_when_it_changes(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    view = View()
+    view = Appearance()
     view.cycle_overflow()
-    assert View.load().overflow == view.overflow
+    assert Appearance.load().overflow == view.overflow
 
 
 def test_unreadable_settings_fall_back_to_the_defaults(tmp_path, monkeypatch):
@@ -148,70 +148,70 @@ def test_unreadable_settings_fall_back_to_the_defaults(tmp_path, monkeypatch):
     config = tmp_path / "gridly" / "config.json"
     config.parent.mkdir(parents=True)
     config.write_text('{"column_width": "enormous", "row_size": 7, "overflow": null}')
-    assert View.load() == View()
+    assert Appearance.load() == Appearance()
 
 
 def test_which_way_round_the_grid_runs_is_not_remembered(tmp_path, monkeypatch):
     """It is a quick look at a wide sheet, not a preference."""
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    view = View(flipped=True)
+    view = Appearance(flipped=True)
     view.save()
-    assert View.load().flipped is False
+    assert Appearance.load().flipped is False
 
 
 # --------------------------------------------------------------- drawing
 
 def test_wrapping_needs_something_to_wrap_against():
-    assert View(overflow="wrap", column_width="unlimited").wrapping is False
-    assert View(overflow="wrap", column_width="fit").wrapping is True
-    assert View(overflow="ellipsis", column_width="small").wrapping is False
+    assert Appearance(overflow="wrap", column_width="unlimited").wrapping is False
+    assert Appearance(overflow="wrap", column_width="fit").wrapping is True
+    assert Appearance(overflow="ellipsis", column_width="small").wrapping is False
 
 
 def test_a_capped_cell_is_cut_rather_than_wrapped():
-    cell = View(column_width="small", overflow="ellipsis").cell(column(), LONG)
+    cell = Appearance(column_width="small", overflow="ellipsis").cell(column(), LONG)
     assert cell.no_wrap and cell.overflow == "ellipsis"
 
 
 def test_a_wrapping_cell_is_left_whole_for_the_row_to_grow_around():
-    cell = View(column_width="small", overflow="wrap").cell(column(), LONG)
+    cell = Appearance(column_width="small", overflow="wrap").cell(column(), LONG)
     assert not cell.no_wrap
 
 
 def test_a_fixed_row_is_always_the_same_height():
-    view = View(row_size="large", overflow="ellipsis")
+    view = Appearance(row_size="large", overflow="ellipsis")
     assert view.row_height([Text(LONG)], [10]) == ROW_SIZES["large"]
 
 
 def test_a_wrapping_row_is_as_tall_as_its_tallest_value():
-    view = View(row_size="small", overflow="wrap", column_width="small")
+    view = Appearance(row_size="small", overflow="wrap", column_width="small")
     assert view.row_height([Text("short"), Text("a" * 40)], [10, 10]) == 4
 
 
 def test_no_value_gets_to_own_the_whole_screen():
-    view = View(overflow="wrap", column_width="small")
+    view = Appearance(overflow="wrap", column_width="small")
     assert view.row_height([Text("a" * 5000)], [10]) == MAX_WRAP_LINES
 
 
 @pytest.mark.parametrize("width", list(COLUMN_WIDTHS))
 def test_a_narrow_column_is_never_padded_out(width):
-    view = View(column_width=width)
+    view = Appearance(column_width=width)
     widths = view.widths([Text("Done")], [[Text("yes")]], 3, 200, 2)
     assert widths[0] in (None, 4), widths
 
 
 def test_a_cap_is_a_maximum():
-    view = View(column_width="small")
+    view = Appearance(column_width="small")
     widths = view.widths([Text("Note")], [[Text(LONG)]], 3, 200, 2)
     assert widths == [COLUMN_CAPS["small"]]
 
 
 def test_uncapped_columns_are_left_for_the_table_to_size():
-    view = View(column_width="unlimited")
+    view = Appearance(column_width="unlimited")
     assert view.widths([Text("Note")], [[Text(LONG)]], 3, 200, 2) == [None]
 
 
 def test_fitting_never_spends_more_room_than_there_is():
-    view = View(column_width="fit")
+    view = Appearance(column_width="fit")
     labels = [Text("A"), Text("B"), Text("C")]
     cells = [[Text(LONG)], [Text("x")], [Text(LONG)]]
     available, gutters, row_label = 40, 2, 2
@@ -222,5 +222,5 @@ def test_fitting_never_spends_more_room_than_there_is():
 
 def test_fitting_with_no_room_yet_falls_back_to_what_values_need():
     """The table has no width until it has been laid out once."""
-    view = View(column_width="fit")
+    view = Appearance(column_width="fit")
     assert view.widths([Text("A")], [[Text("abc")]], 0, 0, 2) == [3]

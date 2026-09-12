@@ -43,7 +43,7 @@ async def main():
         await pilot.pause()
         await pilot.press("v"); await pilot.pause()
         print("flipped :", screen(t))
-        assert app.view.flipped and data(app) == before, "flipping is not a data change"
+        assert app.appearance.flipped and data(app) == before, "flipping is not a data change"
         assert screen(t) == [list(col) for col in zip(*[["Milk","✓","3"],["Bread","✗","1"]])]
 
         # --- the cursor stays on the same cell through the flip
@@ -107,7 +107,7 @@ async def main():
 
         # --- flipping back restores the original drawing
         await pilot.press("v"); await pilot.pause()
-        assert not app.view.flipped
+        assert not app.appearance.flipped
         print("back    :", screen(t))
     print("--- paste in the flipped view ---")
 

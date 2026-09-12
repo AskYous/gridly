@@ -83,7 +83,7 @@ async def main():
         held = set(app._selected)
         await pilot.press("enter"); await pilot.pause()
         await pilot.press("backspace", *"55", "enter"); await pilot.pause()
-        print("wrapping   :", app.view.wrapping, "| width:", app.view.column_width, "| overflow:", app.view.overflow)
+        print("wrapping   :", app.appearance.wrapping, "| width:", app.appearance.column_width, "| overflow:", app.appearance.overflow)
         print("held       :", sorted(held), "now:", sorted(app._selected))
         print("after edit :", len(app._selected), "still selected")
         assert app._selected == held

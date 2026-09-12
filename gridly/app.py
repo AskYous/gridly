@@ -34,11 +34,11 @@ from .clipboard import format_block, parse_block, to_system_clipboard
 from .csvfile import write_csv
 from .picker import choose_sheet
 from .store import Column, Row, Sheet
-from .view import (
+from .appearance import (
     COLUMN_WIDTHS,
     OVERFLOWS,
     ROW_SIZES,
-    View,
+    Appearance,
     centred,
     field_label,
     lines_needed,
@@ -156,7 +156,7 @@ class GridlyApp(App[None]):
         self._rows: list[Row] = []
         # Draw records down the screen (normal) or across it (flipped). This is
         # only ever a way of looking at the sheet — the data is the same either way.
-        self.view = View.load()
+        self.appearance = Appearance.load()
         # A keyboard selection: where it started and which cells it covers now.
         # Cursor moves we made ourselves are counted, because the CellHighlighted
         # they raise arrives later — anything left over is the user moving away,
@@ -186,14 +186,14 @@ class GridlyApp(App[None]):
         table.show_row_labels = True
         table.focus()
         self.reload()
-        if self.view.column_width == "fit":
+        if self.appearance.column_width == "fit":
             # The table has no size until it has been laid out once.
             self.call_after_refresh(self.reload)
 
     @on(Grid.Resized)
     def grid_resized(self) -> None:
         """A fitted table is sized against the viewport, so it follows it."""
-        if self.view.column_width == "fit" and self._columns:
+        if self.appearance.column_width == "fit" and self._columns:
             self.reload()
 
     def watch_theme(self, theme: str) -> None:
@@ -209,12 +209,12 @@ class GridlyApp(App[None]):
 
     def _coordinate(self, record: int, field: int) -> Coordinate:
         """Where a given record and column sit on screen."""
-        return Coordinate(field, record) if self.view.flipped else Coordinate(record, field)
+        return Coordinate(field, record) if self.appearance.flipped else Coordinate(record, field)
 
     def _indices(self, coordinate: Coordinate | None = None) -> tuple[int, int]:
         """The record and column a screen position points at."""
         at = self.table.cursor_coordinate if coordinate is None else coordinate
-        return (at.column, at.row) if self.view.flipped else (at.row, at.column)
+        return (at.column, at.row) if self.appearance.flipped else (at.row, at.column)
 
     # ---------------------------------------------------------------- drawing
 
@@ -229,17 +229,17 @@ class GridlyApp(App[None]):
         self._columns = self.sheet.columns()
         self._rows = self.sheet.rows()
 
-        if self.view.flipped:
+        if self.appearance.flipped:
             # A grid column is a record: size it from that record's own values.
             drawn = {
                 row.id: [
-                    self.view.cell(column, row.values.get(column.id))
+                    self.appearance.cell(column, row.values.get(column.id))
                     for column in self._columns
                 ]
                 for row in self._rows
             }
             labels = [Text(str(n), "dim") for n in range(1, len(self._rows) + 1)]
-            widths = self.view.widths(
+            widths = self.appearance.widths(
                 labels,
                 [drawn[row.id] for row in self._rows],
                 max((widest(field_label(c)) for c in self._columns), default=0),
@@ -249,8 +249,8 @@ class GridlyApp(App[None]):
                 table.add_column(label, key=str(row.id), width=width)
             for index, column in enumerate(self._columns):
                 cells = [drawn[row.id][index] for row in self._rows]
-                height = self.view.row_height(cells, widths)
-                cells = self.view.centre(cells, widths, height)
+                height = self.appearance.row_height(cells, widths)
+                cells = self.appearance.centre(cells, widths, height)
                 table.add_row(
                     *cells,
                     height=height,
@@ -260,12 +260,12 @@ class GridlyApp(App[None]):
         else:
             drawn = {
                 column.id: [
-                    self.view.cell(column, row.values.get(column.id)) for row in self._rows
+                    self.appearance.cell(column, row.values.get(column.id)) for row in self._rows
                 ]
                 for column in self._columns
             }
             labels = [field_label(column) for column in self._columns]
-            widths = self.view.widths(
+            widths = self.appearance.widths(
                 labels,
                 [drawn[column.id] for column in self._columns],
                 len(str(len(self._rows))),
@@ -275,8 +275,8 @@ class GridlyApp(App[None]):
                 table.add_column(label, key=str(column.id), width=width)
             for number, row in enumerate(self._rows, start=1):
                 cells = [drawn[column.id][number - 1] for column in self._columns]
-                height = self.view.row_height(cells, widths)
-                cells = self.view.centre(cells, widths, height)
+                height = self.appearance.row_height(cells, widths)
+                cells = self.appearance.centre(cells, widths, height)
                 table.add_row(
                     *cells,
                     height=height,
@@ -308,7 +308,7 @@ class GridlyApp(App[None]):
         columns, rows = self.sheet.counts()
         column = self.current_column()
         shape = f"{rows} {_plural(rows, 'row')} × {columns} {_plural(columns, 'column')}"
-        if self.view.flipped:
+        if self.appearance.flipped:
             shape += ", flipped"
         detail = ""
         region = self._selection_region()
@@ -401,8 +401,8 @@ class GridlyApp(App[None]):
         row, column = self._cell_at(coordinate)
         if row is None or column is None:
             return
-        text = self.view.cell(column, row.values.get(column.id))
-        if self.view.wrapping:
+        text = self.appearance.cell(column, row.values.get(column.id))
+        if self.appearance.wrapping:
             table = self.table
             text = centred(
                 text,
@@ -444,19 +444,19 @@ class GridlyApp(App[None]):
     def action_settings(self) -> None:
         """Every view setting in one place, rather than four keys to remember."""
 
-        def done(chosen: tuple[View, str] | None) -> None:
+        def done(chosen: tuple[Appearance, str] | None) -> None:
             if chosen is None:
                 return
             view, theme = chosen
-            self.view = view
-            self.view.save()
+            self.appearance = view
+            self.appearance.save()
             self.theme = theme
             self.reload()
             self.notify("Settings saved.")
 
         self.push_screen(
             SettingsScreen(
-                replace(self.view), self.theme, sorted(self.available_themes),
+                replace(self.appearance), self.theme, sorted(self.available_themes),
                 DEFAULT_THEME,
             ),
             done,
@@ -465,35 +465,35 @@ class GridlyApp(App[None]):
     def action_flip(self) -> None:
         """Swap which way the sheet is drawn, keeping the cursor on the same cell."""
         record, field = self._indices()
-        self.view.flipped = not self.view.flipped
+        self.appearance.flipped = not self.appearance.flipped
         self.reload(self._coordinate(record, field))
         self.notify(
-            "Records run across the screen." if self.view.flipped else "Back to normal."
+            "Records run across the screen." if self.appearance.flipped else "Back to normal."
         )
 
     def action_cycle_column_width(self) -> None:
         """Small, large, or let columns take whatever they need."""
-        self.view.cycle_column_width()
+        self.appearance.cycle_column_width()
         self.reload()
-        self._show_cycle("column width", COLUMN_WIDTHS, self.view.column_width)
+        self._show_cycle("column width", COLUMN_WIDTHS, self.appearance.column_width)
 
     def action_toggle_overflow(self) -> None:
         """Wrap a too-long value over the row, or cut it with an ellipsis."""
-        self.view.cycle_overflow()
+        self.appearance.cycle_overflow()
         self.reload()
-        self._show_cycle("long values", OVERFLOWS, self.view.overflow)
-        if not self.view.capped:
+        self._show_cycle("long values", OVERFLOWS, self.appearance.overflow)
+        if not self.appearance.capped:
             self.notify(
-                f"Long values {self.view.overflow} — but nothing is capped, so press w first.",
+                f"Long values {self.appearance.overflow} — but nothing is capped, so press w first.",
                 severity="warning",
             )
 
     def action_toggle_row_size(self) -> None:
         """Swap the row height for the other one."""
-        self.view.cycle_row_size()
+        self.appearance.cycle_row_size()
         self.reload()
-        self._show_cycle("row height", tuple(ROW_SIZES), self.view.row_size)
-        if self.view.wrapping:
+        self._show_cycle("row height", tuple(ROW_SIZES), self.appearance.row_size)
+        if self.appearance.wrapping:
             self.notify(
                 "Wrapping is on, so rows grow to fit whatever they hold."
                 " Press W for a fixed height.",
@@ -545,7 +545,7 @@ class GridlyApp(App[None]):
     def _write(self, row: Row, column: Column, value: Any) -> None:
         self.sheet.set_cell(row.id, column.id, value)
         row.values[column.id] = value
-        if self.view.wrapping:
+        if self.appearance.wrapping:
             # The value may need a different number of lines than the row has,
             # and only a redraw can change that. Nothing structural moved, so
             # the selection is put back afterwards.
@@ -627,7 +627,7 @@ class GridlyApp(App[None]):
         values = [display(c.type, row.values.get(c.id)) for c in self._columns]
         # Copy the shape that is on screen: a record reads down the screen when
         # the view is flipped, and paste reads it back the same way.
-        block = [[value] for value in values] if self.view.flipped else [values]
+        block = [[value] for value in values] if self.appearance.flipped else [values]
         self._copy(format_block(block), f"row {self._rows.index(row) + 1}")
 
     def _copy(self, text: str, what: str) -> None:
@@ -690,15 +690,15 @@ class GridlyApp(App[None]):
         # A block always spills right and down the screen, so which of its axes
         # is records and which is columns depends on which way the grid is drawn.
         record_span, field_span = (
-            (across, len(block)) if self.view.flipped else (len(block), across)
+            (across, len(block)) if self.appearance.flipped else (len(block), across)
         )
         columns = self._columns[field_start : field_start + field_span]
         clipped = field_span - len(columns)
         new_rows = max(0, record_start + record_span - len(self._rows))
 
         def cell(record_offset: int, field_offset: int) -> str:
-            line = block[field_offset if self.view.flipped else record_offset]
-            index = record_offset if self.view.flipped else field_offset
+            line = block[field_offset if self.appearance.flipped else record_offset]
+            index = record_offset if self.appearance.flipped else field_offset
             return line[index] if index < len(line) else ""
 
         plan = [

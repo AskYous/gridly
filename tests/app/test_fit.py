@@ -2,7 +2,7 @@ import os as _os, tempfile as _tf; _os.environ["XDG_CONFIG_HOME"] = _tf.mkdtemp(
 import asyncio, pathlib, tempfile
 from textual.widgets import DataTable
 from gridly.app import GridlyApp
-from gridly.view import MIN_FIT_WIDTH, fair_cap
+from gridly.appearance import MIN_FIT_WIDTH, fair_cap
 from gridly.coltypes import ColumnType
 from gridly.store import Sheet
 
@@ -33,7 +33,7 @@ def spread(app):
 async def main():
     app = GridlyApp(path)
     async with app.run_test(size=(80, 20)) as pilot:
-        while app.view.column_width != "fit":
+        while app.appearance.column_width != "fit":
             await pilot.press("w"); await pilot.pause()
         await pilot.pause()
         used, available, widths = spread(app)
@@ -76,8 +76,8 @@ async def main():
     app2 = GridlyApp(path)
     async with app2.run_test(size=(80, 20)) as pilot:
         await pilot.pause()
-        print("reopened     :", app2.view.column_width)
-        assert app2.view.column_width == "fit"
+        print("reopened     :", app2.appearance.column_width)
+        assert app2.appearance.column_width == "fit"
         used, available, _ = spread(app2)
         assert used <= available, (used, available)
     print("ALL FIT TESTS DONE")

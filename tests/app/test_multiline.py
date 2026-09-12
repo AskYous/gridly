@@ -4,7 +4,7 @@ from textual import events
 from textual.coordinate import Coordinate
 from textual.widgets import DataTable, Input, Static, TextArea
 from gridly.app import GridlyApp
-from gridly.view import fit
+from gridly.appearance import fit
 from gridly.coltypes import ColumnType
 from gridly.screens import CellEditScreen, RowFormScreen
 from gridly.store import Sheet

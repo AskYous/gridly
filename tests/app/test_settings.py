@@ -4,7 +4,7 @@ from gridly.app import DEFAULT_THEME, GridlyApp
 from gridly.coltypes import ColumnType
 from gridly.screens import SettingsScreen
 from gridly.store import Sheet
-from gridly.view import View
+from gridly.appearance import Appearance
 
 def fresh():
     path = pathlib.Path(tempfile.mkdtemp()) / "s.gridly"
@@ -22,13 +22,13 @@ async def main():
     path = fresh()
     app = GridlyApp(path)
     async with app.run_test(size=(100, 40)) as pilot:
-        print("defaults     :", app.view)
+        print("defaults     :", app.appearance)
 
         # --- every view setting is on the page
         await pilot.press("comma"); await pilot.pause()
         assert isinstance(app.screen, SettingsScreen), app.screen
         for key in ("column_width", "overflow", "row_size", "flipped"):
-            assert app.screen.query_one(f"#set-{key}", Select).value == getattr(app.view, key)
+            assert app.screen.query_one(f"#set-{key}", Select).value == getattr(app.appearance, key)
         print("page shows   : column width, long values, row height, layout, theme")
 
         # --- changing them and saving takes effect
@@ -38,19 +38,19 @@ async def main():
         pick(app, "flipped", True)
         await pilot.pause()
         await pilot.press("ctrl+s"); await pilot.pause()
-        print("after save   :", app.view)
-        assert (app.view.column_width, app.view.overflow) == ("small", "wrap")
-        assert app.view.row_size == "large" and app.view.flipped is True
+        print("after save   :", app.appearance)
+        assert (app.appearance.column_width, app.appearance.overflow) == ("small", "wrap")
+        assert app.appearance.row_size == "large" and app.appearance.flipped is True
         assert app.screen is app.screen_stack[0]
 
         # --- escape leaves everything as it was
-        was = View(**vars(app.view))
+        was = Appearance(**vars(app.appearance))
         await pilot.press("comma"); await pilot.pause()
         pick(app, "column_width", "unlimited")
         await pilot.pause()
         await pilot.press("escape"); await pilot.pause()
-        print("after escape :", app.view)
-        assert app.view == was
+        print("after escape :", app.appearance)
+        assert app.appearance == was
 
         # --- the theme changes as you pick it, and comes back if you cancel
         started_as = app.theme
@@ -77,15 +77,15 @@ async def main():
         app.screen.query_one("#reset", Button).press()
         await pilot.pause()
         await pilot.press("ctrl+s"); await pilot.pause()
-        print("after reset  :", app.view, "| theme:", app.theme)
-        assert app.view == View()
+        print("after reset  :", app.appearance, "| theme:", app.theme)
+        assert app.appearance == Appearance()
         assert app.theme == DEFAULT_THEME
 
     # --- and what was saved is there next time
     app2 = GridlyApp(path)
     async with app2.run_test(size=(100, 40)) as pilot:
-        print("reopened     :", app2.view, "| theme:", app2.theme)
-        assert app2.view == View() and app2.theme == DEFAULT_THEME
+        print("reopened     :", app2.appearance, "| theme:", app2.theme)
+        assert app2.appearance == Appearance() and app2.theme == DEFAULT_THEME
 
 def test_settings():
     asyncio.run(main())

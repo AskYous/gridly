@@ -3,7 +3,7 @@ os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp()
 from textual.coordinate import Coordinate
 from textual.widgets import DataTable, TextArea
 from gridly.app import GridlyApp
-from gridly.view import COLUMN_CAPS, MAX_WRAP_LINES, ROW_SIZES
+from gridly.appearance import COLUMN_CAPS, MAX_WRAP_LINES, ROW_SIZES
 from gridly.coltypes import ColumnType
 from gridly.store import Sheet
 
@@ -26,13 +26,13 @@ async def main():
     app = GridlyApp(path)
     async with app.run_test(size=(120, 30)) as pilot:
         t = app.query_one("#grid", DataTable)
-        print("ellipsis, small rows :", heights(app), "| wrapping:", app.view.wrapping)
+        print("ellipsis, small rows :", heights(app), "| wrapping:", app.appearance.wrapping)
         assert heights(app) == [1, 1]
 
         # --- W alone grows the row; row_size is untouched
         await pilot.press("W"); await pilot.pause()
-        print("wrap, row_size still :", app.view.row_size, "->", heights(app))
-        assert app.view.row_size == "small", "wrapping should not need the row-size toggle"
+        print("wrap, row_size still :", app.appearance.row_size, "->", heights(app))
+        assert app.appearance.row_size == "small", "wrapping should not need the row-size toggle"
         assert heights(app)[0] > 1, "the long row should have grown"
         assert heights(app)[1] == 1, "a short row stays one line"
 
@@ -44,19 +44,19 @@ async def main():
 
         # --- narrower cap, taller row
         tall_before = heights(app)[0]
-        while app.view.column_width != "small":
+        while app.appearance.column_width != "small":
             await pilot.press("w"); await pilot.pause()
-        print("small cap            :", app.view.column_width, heights(app))
+        print("small cap            :", app.appearance.column_width, heights(app))
         assert heights(app)[0] > tall_before
 
         # --- uncapped means nothing to wrap against, so back to flat rows
-        while app.view.column_width != "unlimited":
+        while app.appearance.column_width != "unlimited":
             await pilot.press("w"); await pilot.pause()
-        print("unlimited            :", app.view.column_width, heights(app), "| wrapping:", app.view.wrapping)
-        assert not app.view.wrapping and heights(app) == [1, 1]
+        print("unlimited            :", app.appearance.column_width, heights(app), "| wrapping:", app.appearance.wrapping)
+        assert not app.appearance.wrapping and heights(app) == [1, 1]
 
         # --- back to a cap, then check one value cannot own the screen
-        while app.view.column_width != "small":
+        while app.appearance.column_width != "small":
             await pilot.press("w"); await pilot.pause()
         app.sheet.set_cell(r1, note.id, HUGE)
         app.reload(); await pilot.pause()
@@ -75,7 +75,7 @@ async def main():
         assert heights(app)[1] > before
 
         # --- short values sit in the middle of a grown row, not at the top
-        while app.view.column_width != "small":           # small cap -> a tall row
+        while app.appearance.column_width != "small":           # small cap -> a tall row
             await pilot.press("w"); await pilot.pause()
         height = heights(app)[0]
         short = t.get_cell_at(Coordinate(0, 0))       # "Ship it", one line
@@ -86,7 +86,7 @@ async def main():
         # the tall value that set the height keeps its first line
         tall = t.get_cell_at(Coordinate(0, 2))
         assert not tall.plain.startswith("\n"), "the tallest value should not be pushed down"
-        while app.view.column_width != "large":
+        while app.appearance.column_width != "large":
             await pilot.press("w"); await pilot.pause()
 
         # --- a selection survives the redraw that re-heights the row
@@ -115,9 +115,9 @@ async def main():
         # --- turning wrapping off puts row_size back in charge
         await pilot.press("W"); await pilot.pause()
         print("ellipsis again       :", heights(app))
-        assert heights(app) == [ROW_SIZES[app.view.row_size]] * 2
+        assert heights(app) == [ROW_SIZES[app.appearance.row_size]] * 2
         await pilot.press("s"); await pilot.pause()
-        print("s with ellipsis      :", app.view.row_size, heights(app))
+        print("s with ellipsis      :", app.appearance.row_size, heights(app))
         assert heights(app) == [ROW_SIZES["large"]] * 2
     print("ALL WRAP TESTS DONE")
 

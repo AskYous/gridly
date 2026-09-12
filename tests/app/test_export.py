@@ -64,7 +64,7 @@ async def main():
 
         # --- the flipped view is a view: the CSV is still one record per line
         await pilot.press("v"); await pilot.pause()
-        assert app.view.flipped
+        assert app.appearance.flipped
         other = out / "flipped.csv"
         await pilot.press("E"); await pilot.pause()
         field = app.screen.query_one("#path", Input)

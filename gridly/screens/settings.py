@@ -10,7 +10,7 @@ from textual.containers import Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Label, Select, Static
 
-from ..view import View
+from ..appearance import Appearance
 
 
 #: Every setting, with something readable to say about each choice.
@@ -56,7 +56,7 @@ SETTINGS = [
 ]
 
 
-class SettingsScreen(ModalScreen[tuple[View, str] | None]):
+class SettingsScreen(ModalScreen[tuple[Appearance, str] | None]):
     """Everything the view keys do, in one place, with a way back to the defaults."""
 
     BINDINGS = [
@@ -64,9 +64,9 @@ class SettingsScreen(ModalScreen[tuple[View, str] | None]):
         Binding("escape", "cancel", "Cancel", show=False),
     ]
 
-    def __init__(self, view: View, theme: str, themes: list[str], default_theme: str):
+    def __init__(self, view: Appearance, theme: str, themes: list[str], default_theme: str):
         super().__init__()
-        self.view = view
+        self.appearance = view
         self.theme_was = theme
         self.themes = themes
         self.default_theme = default_theme
@@ -81,7 +81,7 @@ class SettingsScreen(ModalScreen[tuple[View, str] | None]):
                         yield Static(f"[dim]{about}[/]", classes="setting-about")
                         yield Select(
                             choices,
-                            value=getattr(self.view, key),
+                            value=getattr(self.appearance, key),
                             allow_blank=False,
                             id=f"set-{key}",
                         )
@@ -110,13 +110,13 @@ class SettingsScreen(ModalScreen[tuple[View, str] | None]):
 
     @on(Button.Pressed, "#reset")
     def reset(self) -> None:
-        fresh = View()
+        fresh = Appearance()
         for key, *_ in SETTINGS:
             self.query_one(f"#set-{key}", Select).value = getattr(fresh, key)
         self.query_one("#set-theme", Select).value = self.default_theme
 
     def action_save(self) -> None:
-        chosen = View(
+        chosen = Appearance(
             **{key: self.query_one(f"#set-{key}", Select).value for key, *_ in SETTINGS}
         )
         self.dismiss((chosen, str(self.query_one("#set-theme", Select).value)))
