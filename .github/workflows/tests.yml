@@ -23,9 +23,12 @@ jobs:
       - name: Install
         run: pip install -e ".[dev]"
 
+      # Fast half first, so an obvious break is reported in seconds.
       - name: Unit tests
         run: python -m pytest tests/unit
 
-      # Separate step so a failure says which half broke without reading the log.
-      - name: App tests
-        run: python -m pytest tests/app
+      # Everything, and a floor under how much of the code the tests reach.
+      # The floor sits just below where coverage stands, so it catches a
+      # feature arriving without tests rather than a line or two of drift.
+      - name: All tests, with a coverage floor
+        run: python -m pytest --cov=gridly --cov-report=term-missing --cov-fail-under=93

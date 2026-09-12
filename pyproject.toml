@@ -6,7 +6,7 @@ requires-python = ">=3.10"
 dependencies = ["textual>=1.0"]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-asyncio"]
+dev = ["pytest", "pytest-asyncio", "pytest-cov"]
 
 [project.scripts]
 gridly = "gridly.app:main"

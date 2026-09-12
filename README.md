@@ -32,7 +32,9 @@ They share a process, so `tests/conftest.py` points the config and the
 clipboard somewhere harmless before any of them run.
 
 Both halves run on every push and pull request, against Python 3.10, 3.12 and
-3.13.
+3.13, and the run fails if the tests stop reaching 93% of the code. Coverage
+sits at 94%; the floor is there to catch a feature arriving without tests, not
+to be chased upwards.
 
 ## The screenshot
 
