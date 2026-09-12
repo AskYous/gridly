@@ -99,7 +99,7 @@ class GridlyApp(App[None]):
         Binding("x", "delete_column", "-Col", show=False),
         Binding("left_square_bracket", "move_column(-1)", "Move col left", show=False),
         Binding("right_square_bracket", "move_column(1)", "Move col right", show=False),
-        Binding("comma", "settings", "Settings", show=False, key_display=","),
+        Binding("comma", "settings", "Settings", key_display=","),
         Binding("t", "change_theme", "Theme", show=False),
         Binding("question_mark", "help", "Help", key_display="?"),
         Binding("q", "quit", "Quit"),
@@ -174,7 +174,7 @@ class GridlyApp(App[None]):
         yield Header()
         yield Grid(id="grid", cursor_type="cell", zebra_stripes=True)
         yield Static("", id="status")
-        yield Footer()
+        yield Footer(compact=True)
 
     def on_mount(self) -> None:
         saved = config.load()
