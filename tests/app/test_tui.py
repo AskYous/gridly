@@ -110,7 +110,7 @@ async def main():
         print("help open:", type(app.screen).__name__)
         await pilot.press("escape"); await pilot.pause()
 
-        app.save_screenshot("/private/tmp/claude-501/-Users-yousefshanawany-Developer/9687c5f3-0207-4461-9381-716baac0d61c/scratchpad/grid.svg")
+        app.save_screenshot(str(pathlib.Path(tempfile.mkdtemp()) / "grid.svg"))
 
     # persistence across a fresh open
     reopened = Sheet(path)
