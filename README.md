@@ -99,6 +99,7 @@ where it can't, telling you how many it dropped.
 | `Y`         | copy the whole row, tab separated             |
 | `E`         | export the sheet to a CSV file                |
 | `cmd/ctrl+v`| paste cells copied from a spreadsheet         |
+| `,`         | settings: width, wrapping, height, layout, theme |
 | `t`         | change the colour theme                       |
 | `ctrl+p`    | command palette — every command, searchable   |
 | `?`         | help                                          |
@@ -195,6 +196,14 @@ happen, and the notification tells you `u` will put them back.
 
 The stack lives for as long as the app is open. Closing the sheet forgets it —
 what is on disk is what you have.
+
+## Settings
+
+`w`, `W`, `s`, `v` and `t` each change one thing and are quick once you know
+them. `,` opens all of them on one page instead, each with a line saying what
+it does and what the choices mean, plus a button that puts everything back to
+how it started. The theme changes as you move through the list so you can see
+it; `esc` puts it back.
 
 ## Column width
 

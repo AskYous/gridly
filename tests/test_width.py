@@ -79,7 +79,7 @@ async def main():
         print("reopened     :", app2.view.column_width, "/", app2.view.overflow)
         assert (app2.view.column_width, app2.view.overflow) == ("small", "wrap")
 
-    config.CONFIG_PATH.write_text('{"column_width": "enormous", "overflow": "nope"}')
+    config.path().write_text('{"column_width": "enormous", "overflow": "nope"}')
     app3 = GridlyApp(path)
     async with app3.run_test(size=(120, 24)) as pilot:
         print("junk config  :", app3.view.column_width, "/", app3.view.overflow)

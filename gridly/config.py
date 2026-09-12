@@ -7,17 +7,23 @@ import os
 from pathlib import Path
 from typing import Any
 
-CONFIG_PATH = (
-    Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
-    / "gridly"
-    / "config.json"
-)
+def path() -> Path:
+    """Where the settings live.
+
+    Worked out each time rather than once at import, so that pointing
+    XDG_CONFIG_HOME somewhere else actually takes effect.
+    """
+    return (
+        Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+        / "gridly"
+        / "config.json"
+    )
 
 
 def load() -> dict[str, Any]:
     """Read the config, treating a missing or corrupt file as empty."""
     try:
-        data = json.loads(CONFIG_PATH.read_text())
+        data = json.loads(path().read_text())
     except (OSError, ValueError):
         return {}
     return data if isinstance(data, dict) else {}
@@ -27,8 +33,9 @@ def save(**values: Any) -> None:
     """Merge values into the config. Failure to write is not worth crashing over."""
     data = load() | values
     try:
-        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        CONFIG_PATH.write_text(json.dumps(data, indent=2) + "\n")
+        target = path()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(data, indent=2) + "\n")
     except OSError:
         pass
 

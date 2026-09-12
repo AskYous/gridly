@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,7 @@ from .screens import (
     HelpScreen,
     PickScreen,
     RowFormScreen,
+    SettingsScreen,
 )
 from .clipboard import format_block, parse_block, to_system_clipboard
 from .csvfile import write_csv
@@ -97,6 +99,7 @@ class GridlyApp(App[None]):
         Binding("x", "delete_column", "-Col", show=False),
         Binding("left_square_bracket", "move_column(-1)", "Move col left", show=False),
         Binding("right_square_bracket", "move_column(1)", "Move col right", show=False),
+        Binding("comma", "settings", "Settings", show=False, key_display=","),
         Binding("t", "change_theme", "Theme", show=False),
         Binding("question_mark", "help", "Help", key_display="?"),
         Binding("q", "quit", "Quit"),
@@ -123,6 +126,7 @@ class GridlyApp(App[None]):
         ("export", "Export to CSV", "Write the sheet out as a file", True),
         ("undo", "Undo", "Take back the last change", True),
         ("redo", "Redo", "Put back what undo took away", True),
+        ("settings", "Settings", "Width, wrapping, row height, layout and theme", True),
         ("flip", "Flip the view", "Draw records across the screen instead of down", True),
         ("toggle_row_size", "Toggle row height", "Between one line and three", True),
         ("cycle_column_width", "Cycle column width", "Large, fit to the screen, small, or uncapped", True),
@@ -436,6 +440,27 @@ class GridlyApp(App[None]):
         for coordinate in self._selected:
             self._repaint(coordinate, False)
         self._selected = set()
+
+    def action_settings(self) -> None:
+        """Every view setting in one place, rather than four keys to remember."""
+
+        def done(chosen: tuple[View, str] | None) -> None:
+            if chosen is None:
+                return
+            view, theme = chosen
+            self.view = view
+            self.view.save()
+            self.theme = theme
+            self.reload()
+            self.notify("Settings saved.")
+
+        self.push_screen(
+            SettingsScreen(
+                replace(self.view), self.theme, sorted(self.available_themes),
+                DEFAULT_THEME,
+            ),
+            done,
+        )
 
     def action_flip(self) -> None:
         """Swap which way the sheet is drawn, keeping the cursor on the same cell."""

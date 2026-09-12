@@ -22,6 +22,15 @@ from .coltypes import (
     parse,
 )
 from .store import Column, Row
+from .view import (
+    COLUMN_WIDTHS,
+    DEFAULT_COLUMN_WIDTH,
+    DEFAULT_OVERFLOW,
+    DEFAULT_ROW_SIZE,
+    OVERFLOWS,
+    ROW_SIZES,
+    View,
+)
 
 CLEAR_OPTION = "— clear —"
 
@@ -360,6 +369,119 @@ class ColumnScreen(
         self.dismiss(None)
 
 
+#: Every setting, with something readable to say about each choice.
+SETTINGS = [
+    (
+        "column_width",
+        "Column width",
+        "How wide a column is allowed to get.",
+        [
+            ("fit — share the screen so the whole table fits across", "fit"),
+            ("large — stop at 36 characters", "large"),
+            ("small — stop at 16 characters", "small"),
+            ("unlimited — as wide as the longest value", "unlimited"),
+        ],
+    ),
+    (
+        "overflow",
+        "Long values",
+        "What happens to a value too long for its column.",
+        [
+            ("ellipsis — cut it off with a …", "ellipsis"),
+            ("wrap — wrap it, growing the row to fit", "wrap"),
+        ],
+    ),
+    (
+        "row_size",
+        "Row height",
+        "How tall a row is. Ignored while values wrap, since they set their own.",
+        [
+            ("small — one line", "small"),
+            ("large — three lines", "large"),
+        ],
+    ),
+    (
+        "flipped",
+        "Layout",
+        "Which way round the grid runs. Not remembered between runs.",
+        [
+            ("normal — a row per record", False),
+            ("flipped — a column per record", True),
+        ],
+    ),
+]
+
+
+class SettingsScreen(ModalScreen[tuple[View, str] | None]):
+    """Everything the view keys do, in one place, with a way back to the defaults."""
+
+    BINDINGS = [
+        Binding("ctrl+s", "save", "Save", show=False),
+        Binding("escape", "cancel", "Cancel", show=False),
+    ]
+
+    def __init__(self, view: View, theme: str, themes: list[str], default_theme: str):
+        super().__init__()
+        self.view = view
+        self.theme_was = theme
+        self.themes = themes
+        self.default_theme = default_theme
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="form"):
+            with Vertical(classes="form-inner"):
+                yield Label("Settings", classes="dialog-title")
+                with VerticalScroll(classes="form-fields"):
+                    for key, title, about, choices in SETTINGS:
+                        yield Label(title, classes="field-label")
+                        yield Static(f"[dim]{about}[/]", classes="setting-about")
+                        yield Select(
+                            choices,
+                            value=getattr(self.view, key),
+                            allow_blank=False,
+                            id=f"set-{key}",
+                        )
+                    yield Label("Theme", classes="field-label")
+                    yield Static(
+                        "[dim]Changes as you pick, so you can see it.[/]",
+                        classes="setting-about",
+                    )
+                    yield Select(
+                        [(name, name) for name in self.themes],
+                        value=self.theme_was,
+                        allow_blank=False,
+                        id="set-theme",
+                    )
+                    yield Button(
+                        "Reset everything to defaults", compact=True, id="reset"
+                    )
+                yield Static(
+                    "[dim]tab move · ctrl+s save · esc cancel[/]",
+                    classes="dialog-help",
+                )
+
+    @on(Select.Changed, "#set-theme")
+    def preview_theme(self, event: Select.Changed) -> None:
+        self.app.theme = str(event.value)
+
+    @on(Button.Pressed, "#reset")
+    def reset(self) -> None:
+        fresh = View()
+        for key, *_ in SETTINGS:
+            self.query_one(f"#set-{key}", Select).value = getattr(fresh, key)
+        self.query_one("#set-theme", Select).value = self.default_theme
+
+    def action_save(self) -> None:
+        chosen = View(
+            **{key: self.query_one(f"#set-{key}", Select).value for key, *_ in SETTINGS}
+        )
+        self.dismiss((chosen, str(self.query_one("#set-theme", Select).value)))
+
+    def action_cancel(self) -> None:
+        self.app.theme = self.theme_was  # undo the preview
+        self.dismiss(None)
+
+
 class ExportScreen(ModalScreen[str | None]):
     """Ask where to write the CSV."""
 
@@ -458,6 +580,7 @@ class HelpScreen(ModalScreen[None]):
             ("W", "Wrap long values, or cut with …"),
             ("s", "Row height: one line or three"),
             ("v", "Flip: records across, not down"),
+            (",", "Settings: all of the above in one page"),
             ("t", "Change the colour theme"),
         ]),
         ("Finding things", [

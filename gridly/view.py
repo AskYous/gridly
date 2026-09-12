@@ -70,6 +70,14 @@ class View:
             view.overflow = saved["overflow"]
         return view
 
+    def save(self) -> None:
+        """Write the settings that outlive the session."""
+        config.save(
+            row_size=self.row_size,
+            column_width=self.column_width,
+            overflow=self.overflow,
+        )
+
     # ------------------------------------------------------------- switching
 
     def cycle_column_width(self) -> None:
