@@ -12,11 +12,22 @@ SQLite file — there is no save step and nothing to lose on a crash.
 .venv/bin/python -m pytest
 ```
 
-Twenty of them, each driving the real app through Textual's test harness rather
-than poking at its internals — pressing keys, reading what the grid ends up
-showing, and checking what landed in the file. They share a process, so
-`tests/conftest.py` points the config and the clipboard somewhere harmless
-before any of them run.
+`tests/unit` is the logic on its own — parsing, storage round trips, the
+width and height maths, undo, the clipboard format, the CSV writer. A hundred
+and sixty of them, and they finish in under a second, so there is no reason not
+to run them.
+
+`tests/app` drives the real app through Textual's test harness: pressing keys,
+reading what the grid ends up showing, checking what landed in the file. Twenty
+of them, and they take about forty seconds between them.
+
+```sh
+.venv/bin/python -m pytest tests/unit   # while working
+.venv/bin/python -m pytest              # before pushing
+```
+
+They share a process, so `tests/conftest.py` points the config and the
+clipboard somewhere harmless before any of them run.
 
 ## The screenshot
 
