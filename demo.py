@@ -1,15 +1,18 @@
 """Build demo.gridly — the sheet the screenshot in the README is taken from.
 
-    python demo.py [PATH]
+    python demo.py [PATH] [--rows N]
 
 Rewrites the file from scratch each time, so the picture can be retaken after
-the app changes.
+the app changes. Ask for more rows than there are written out below and the
+rest are made up, which is the quick way to a sheet big enough to see how the
+app behaves when it is carrying something.
 """
 
 from __future__ import annotations
 
-import sys
-from datetime import date
+import argparse
+import itertools
+from datetime import date, timedelta
 from pathlib import Path
 
 from gridly.coltypes import ColumnType as T
@@ -79,7 +82,34 @@ ROWS = [
 ]
 
 
-def build(path: Path) -> Path:
+VERBS = ["Fix", "Ship", "Audit", "Migrate", "Retire", "Cache", "Localise",
+         "Rewrite", "Profile", "Document", "Split", "Trim", "Harden", "Rename"]
+NOUNS = ["the search index", "the billing job", "the session store", "the API docs",
+         "the retry queue", "the onboarding flow", "the export path", "the token cache",
+         "the webhook handler", "the settings page", "the audit log", "the SMS gateway"]
+
+
+def invented(number: int) -> tuple:
+    """A plausible row, for when more are wanted than are written out above."""
+    verb = VERBS[number % len(VERBS)]
+    noun = NOUNS[(number // len(VERBS)) % len(NOUNS)]
+    statuses = list(COLUMNS[1][2])
+    priorities = list(COLUMNS[2][2])
+    owners = list(COLUMNS[3][2])
+    status = statuses[number % len(statuses)]
+    return (
+        f"{verb} {noun} ({number})",
+        status,
+        priorities[number % len(priorities)],
+        owners[number % len(owners)],
+        round((number % 16) + 0.5, 1),
+        (date(2026, 9, 1) + timedelta(days=number % 90)).isoformat(),
+        status == "Done",
+        f"Note {number}" if number % 3 else "",
+    )
+
+
+def build(path: Path, rows: int) -> Path:
     path = Path(path).expanduser()
     path.unlink(missing_ok=True)
     sheet = Sheet(path)
@@ -90,19 +120,29 @@ def build(path: Path) -> Path:
         sheet.add_column(name, coltype, list(colors), colors)
         for name, coltype, colors in COLUMNS
     ]
+    wanted = itertools.chain(ROWS, (invented(n) for n in itertools.count()))
+
     existing = sheet.rows()
-    for index, values in enumerate(ROWS):
-        row_id = existing[0].id if index == 0 and existing else sheet.add_row()
-        for column, value in zip(columns, values):
-            if value == "" or value is None:
-                continue
-            if column.type is T.DATE:
-                value = date.fromisoformat(value)
-            sheet.set_cell(row_id, column.id, value)
+    with sheet.change("build"):             # one undo step, not thousands
+        for index, values in zip(range(rows), wanted):
+            row_id = existing[0].id if index == 0 and existing else sheet.add_row()
+            for column, value in zip(columns, values):
+                if value == "" or value is None:
+                    continue
+                if column.type is T.DATE:
+                    value = date.fromisoformat(value)
+                sheet.set_cell(row_id, column.id, value)
     sheet.close()
     return path.resolve()
 
 
 if __name__ == "__main__":
-    target = build(sys.argv[1] if len(sys.argv) > 1 else "demo.gridly")
-    print(f"wrote {target}\n\nopen it with:  gridly {target}")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("path", nargs="?", default="demo.gridly")
+    parser.add_argument(
+        "--rows", type=int, default=len(ROWS),
+        help=f"how many rows to write (default {len(ROWS)}, the ones in the picture)",
+    )
+    args = parser.parse_args()
+    target = build(args.path, args.rows)
+    print(f"wrote {target} with {args.rows} rows\n\nopen it with:  gridly {target}")

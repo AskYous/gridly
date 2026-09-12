@@ -46,6 +46,13 @@ coloured. About 142×36 shows the whole thing:
 python demo.py && gridly demo.gridly
 ```
 
+`--rows N` writes more than the thirty in the picture, making the rest up, for
+when you want a sheet with something in it:
+
+```sh
+python demo.py big.gridly --rows 2000
+```
+
 ## Install
 
 ```sh
