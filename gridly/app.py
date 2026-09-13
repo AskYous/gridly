@@ -100,8 +100,9 @@ class GridlyApp(App[None]):
         Binding("c", "add_column", "+Col"),
         Binding("e", "edit_column", "Edit col", show=False),
         Binding("x", "delete_column", "-Col", show=False),
-        Binding("ctrl+up", "move_row(-1)", "Move row up", show=False),
-        Binding("ctrl+down", "move_row(1)", "Move row down", show=False),
+        # ctrl+arrows belong to Mission Control on a Mac, so they never arrive.
+        Binding("left_curly_bracket,alt+up", "move_row(-1)", "Move row up", show=False),
+        Binding("right_curly_bracket,alt+down", "move_row(1)", "Move row down", show=False),
         Binding("left_square_bracket", "move_column(-1)", "Move col left", show=False),
         Binding("right_square_bracket", "move_column(1)", "Move col right", show=False),
         Binding("comma", "settings", "Settings", key_display=","),

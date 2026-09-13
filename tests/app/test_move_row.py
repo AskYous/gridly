@@ -26,29 +26,37 @@ async def main():
 
         # --- down, and the cursor goes with it
         t.cursor_coordinate = Coordinate(0, 0); await pilot.pause()
-        await pilot.press("ctrl+down"); await pilot.pause()
+        await pilot.press("right_curly_bracket"); await pilot.pause()
         print("after down   :", order(app), "cursor:", t.cursor_coordinate.row)
         assert order(app) == ["two", "one", "three"]
         assert t.cursor_coordinate.row == 1, "the cursor should follow the row"
 
         # --- and back up
-        await pilot.press("ctrl+up"); await pilot.pause()
+        await pilot.press("left_curly_bracket"); await pilot.pause()
         print("after up     :", order(app))
         assert order(app) == ["one", "two", "three"]
 
         # --- it stops at the ends rather than wrapping or failing
-        await pilot.press("ctrl+up"); await pilot.pause()
+        await pilot.press("left_curly_bracket"); await pilot.pause()
         print("at the top   :", order(app), "cursor:", t.cursor_coordinate.row)
         assert order(app) == ["one", "two", "three"]
         assert t.cursor_coordinate.row == 0
         t.cursor_coordinate = Coordinate(2, 0); await pilot.pause()
-        await pilot.press("ctrl+down"); await pilot.pause()
+        await pilot.press("right_curly_bracket"); await pilot.pause()
         assert order(app) == ["one", "two", "three"]
         assert t.cursor_coordinate.row == 2
 
+        # --- alt+arrows do the same, for anyone who reaches for those
+        t.cursor_coordinate = Coordinate(0, 0); await pilot.pause()
+        await pilot.press("alt+down"); await pilot.pause()
+        assert order(app) == ["two", "one", "three"]
+        await pilot.press("alt+up"); await pilot.pause()
+        assert order(app) == ["one", "two", "three"]
+        print("alt works    : yes")
+
         # --- a move can be taken back
         t.cursor_coordinate = Coordinate(0, 0); await pilot.pause()
-        await pilot.press("ctrl+down"); await pilot.pause()
+        await pilot.press("right_curly_bracket"); await pilot.pause()
         assert order(app) == ["two", "one", "three"]
         await pilot.press("u"); await pilot.pause()
         print("undone       :", order(app))
@@ -56,7 +64,7 @@ async def main():
 
         # --- the new order is what is on disk
         t.cursor_coordinate = Coordinate(0, 0); await pilot.pause()
-        await pilot.press("ctrl+down"); await pilot.pause()
+        await pilot.press("right_curly_bracket"); await pilot.pause()
         assert order(app) == ["two", "one", "three"]
     reopened = Sheet(app.sheet.path)
     first = reopened.columns()[0].id
