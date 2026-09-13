@@ -16,7 +16,7 @@ from gridly.appearance import (
     MIN_FIT_WIDTH,
     OVERFLOWS,
         Appearance,
-    centred,
+    indented,
     fair_cap,
     fit,
     lines_needed,
@@ -78,24 +78,40 @@ def test_tabs_would_break_the_columns_so_they_become_spaces():
     assert "\t" not in fit("a\tb", 1).plain
 
 
-# ---------------------------------------------------------------- centring
+# --------------------------------------------------------------- placing
 
-@pytest.mark.parametrize(
-    "height, expected_blank_lines",
-    [(1, 0), (2, 0), (3, 1), (4, 1), (5, 2)],
-)
-def test_a_one_line_value_sits_in_the_middle(height, expected_blank_lines):
-    out = centred(Text("x"), height).plain
-    assert len(out) - len(out.lstrip("\n")) == expected_blank_lines
+@pytest.mark.parametrize("above", [0, 1, 3])
+def test_a_value_is_pushed_down_by_exactly_what_it_is_given(above):
+    out = indented(Text("x"), above).plain
+    assert len(out) - len(out.lstrip("\n")) == above
 
 
-def test_a_value_as_tall_as_its_row_is_not_pushed_down():
-    assert centred(Text("a\nb\nc"), 3).plain == "a\nb\nc"
+def test_no_padding_leaves_the_value_alone():
+    cell = Text("a\nb\nc")
+    assert indented(cell, 0) is cell
 
 
-def test_centring_can_be_told_how_tall_the_value_really_is():
-    """Once wrapped, a value takes more lines than its newlines suggest."""
-    assert centred(Text("x"), 5, lines=3).plain == "\nx"
+def test_placing_keeps_how_the_value_is_laid_out_across_its_column():
+    assert indented(Text("✓", justify="center"), 2).justify == "center"
+
+
+@pytest.mark.parametrize("padded", [False, True])
+def test_everything_in_a_row_starts_on_the_same_line(padded):
+    """A short value beside a tall one used to sit a line lower than it."""
+    appearance = Appearance(padded=padded, overflow="wrap", column_width="small")
+    cells = [Text("a" * 45), Text("x"), Text("b" * 20)]
+    widths = [16, 16, 16]
+    starts = {
+        len(cell.plain) - len(cell.plain.lstrip("\n"))
+        for cell in appearance.place(cells)
+    }
+    assert starts == {PADDING if padded else 0}
+
+
+def test_a_padded_row_is_taller_than_what_it_holds_by_the_padding():
+    appearance = Appearance(padded=True, overflow="wrap", column_width="small")
+    cells, widths = [Text("a" * 45)], [16]
+    assert appearance.row_height(cells, widths) == 3 + 2 * PADDING
 
 
 # ------------------------------------------------------------ sharing width
@@ -239,10 +255,10 @@ def test_everything_else_is_left_where_it_is(coltype, value):
 
 def test_centring_a_row_keeps_how_the_value_is_placed_across_it():
     cell = render(column(ColumnType.BOOLEAN), True, 1)
-    assert centred(cell, 5).justify == "center"
+    assert indented(cell, 5).justify == "center"
 
 
-def test_a_drawn_boolean_cell_is_still_centred():
+def test_a_drawn_boolean_cell_is_still_indented():
     """Through Appearance.cell, which is what the grid actually gets."""
     cell = Appearance(padded=True).cell(column(ColumnType.BOOLEAN), True)
     assert cell.justify == "center"

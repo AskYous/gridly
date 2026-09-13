@@ -74,18 +74,17 @@ async def main():
         print("after editing row 2  :", before, "->", heights(app)[1])
         assert heights(app)[1] > before
 
-        # --- short values sit in the middle of a grown row, not at the top
+        # --- every value in a grown row starts on the same line
         while app.appearance.column_width != "small":           # small cap -> a tall row
             await pilot.press("w"); await pilot.pause()
         height = heights(app)[0]
-        short = t.get_cell_at(Coordinate(0, 0))       # "Ship it", one line
-        above = len(short.plain) - len(short.plain.lstrip("\n"))
-        print("row is", height, "tall; short value starts on line", above + 1)
+        starts = {
+            len(cell.plain) - len(cell.plain.lstrip("\n"))
+            for cell in (t.get_cell_at(Coordinate(0, n)) for n in range(3))
+        }
+        print("row is", height, "tall; values start on line", {n + 1 for n in starts})
         assert height >= 4, height
-        assert above == (height - 1) // 2, (above, height)
-        # the tall value that set the height keeps its first line
-        tall = t.get_cell_at(Coordinate(0, 2))
-        assert not tall.plain.startswith("\n"), "the tallest value should not be pushed down"
+        assert starts == {PADDING if app.appearance.padded else 0}, starts
         while app.appearance.column_width != "large":
             await pilot.press("w"); await pilot.pause()
 
