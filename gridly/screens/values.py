@@ -142,12 +142,21 @@ class RowFormScreen(ModalScreen[dict[int, Any] | None]):
         Binding("escape", "cancel", "Cancel", show=False),
     ]
 
-    def __init__(self, columns: list[Column], row: Row, number: int, total: int) -> None:
+    def __init__(
+        self,
+        columns: list[Column],
+        row: Row,
+        number: int,
+        total: int,
+        clash=lambda column, value: None,
+    ) -> None:
         super().__init__()
         self.columns = columns
         self.row = row
         self.number = number
         self.total = total
+        #: Given a column and a value, says why it cannot be saved, or nothing.
+        self.clash = clash
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="form"):
@@ -194,10 +203,17 @@ class RowFormScreen(ModalScreen[dict[int, Any] | None]):
                     column.type, read_editor(field), column.options
                 )
             except ValidationError as error:
-                self.query_one("#error", Static).update(f"[red]{column.name}: {error}[/]")
-                field.focus()
-                return
+                return self._refuse(field, f"{column.name}: {error}")
+
+        for column in self.columns:
+            complaint = self.clash(column, values[column.id])
+            if complaint:
+                return self._refuse(self.query_one(f"#field-{column.id}"), complaint)
         self.dismiss(values)
+
+    def _refuse(self, field, message: str) -> None:
+        self.query_one("#error", Static).update(f"[red]{message}[/]")
+        field.focus()
 
     def action_cancel(self) -> None:
         self.dismiss(None)

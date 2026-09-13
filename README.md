@@ -153,6 +153,23 @@ name, with a sentence saying what it means — including the things whose keys
 are easy to miss, like moving a column left or right. A test asserts every
 key binding has a palette entry, so the two cannot drift apart.
 
+## Unique columns
+
+A column can be told that no two rows may share a value — an id, an email, a
+reference. Tick *Unique* in the column form and Gridly stops a repeat getting
+in, wherever it comes from:
+
+- typing one into a cell is refused and says which row already has it
+- the row form refuses inline, so the rest of what you typed is not lost
+- a paste drops the values that would repeat, keeps the rest, and counts them
+- `D` duplicates the row but leaves its unique columns empty, since a copy of
+  them is the one thing the column does not allow
+
+Empty cells are not compared, so any number of rows may have nothing there.
+Values are compared as they are stored, so `A1` and `a1` are two different
+things. Turning the rule on is refused while the column still repeats itself,
+and says which values to sort out first.
+
 ## Dropdown options
 
 `c` and `e` open a full-screen form — the same shape as the row form — rather

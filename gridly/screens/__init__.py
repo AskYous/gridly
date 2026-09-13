@@ -4,7 +4,7 @@ Split by what they are for rather than kept in one file, since between them
 they had grown past six hundred lines.
 """
 
-from .columns import ColumnScreen, OptionRow
+from .columns import ColumnScreen, ColumnSpec, OptionRow
 from .dialogs import ConfirmScreen, ExportScreen, HelpScreen
 from .settings import SETTINGS, SettingsScreen
 from .values import (
@@ -20,6 +20,7 @@ __all__ = [
     "CLEAR_OPTION",
     "CellEditScreen",
     "ColumnScreen",
+    "ColumnSpec",
     "ConfirmScreen",
     "ExportScreen",
     "HelpScreen",

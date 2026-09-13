@@ -8,15 +8,28 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, Select, Static
+from textual.widgets import Button, Checkbox, Input, Label, Select, Static
 
 from ..coltypes import OPTION_COLORS, ColumnType, assign_colors, color_style
+from dataclasses import dataclass, field
+
 from ..store import Column
 
 
 def _swatch(color: str) -> Text:
     """A colour's name next to a block of it, for the colour dropdown."""
     return Text.assemble(("███ ", color_style(color)), (color, ""))
+
+@dataclass
+class ColumnSpec:
+    """What the form says a column should be."""
+
+    name: str
+    type: ColumnType
+    options: list[str] = field(default_factory=list)
+    colors: dict[str, str] = field(default_factory=dict)
+    unique: bool = False
+
 
 class OptionRow(Horizontal):
     """One dropdown option: what it is called and what colour it is shown in."""
@@ -52,9 +65,7 @@ class OptionRow(Horizontal):
         picked = self.query_one(".option-color", Select).value
         return name, None if picked is Select.NULL else str(picked)
 
-class ColumnScreen(
-    ModalScreen[tuple[str, ColumnType, list[str], dict[str, str]] | None]
-):
+class ColumnScreen(ModalScreen[ColumnSpec | None]):
     """Create or edit a column definition."""
 
     BINDINGS = [
@@ -91,6 +102,12 @@ class ColumnScreen(
                         for option in column.options if column else []:
                             yield OptionRow(option, column.color(option))
                     yield Button("+ add option", compact=True, id="add-option")
+                    yield Label("Rules", classes="field-label")
+                    yield Checkbox(
+                        "Unique — no two rows may hold the same value",
+                        value=column.unique if column else False,
+                        id="unique",
+                    )
                 yield Static("", id="error", classes="error")
                 yield Static(
                     "[dim]tab move · ctrl+s save · esc cancel[/]",
@@ -151,7 +168,15 @@ class ColumnScreen(
             return self._error("A dropdown needs at least one option")
         if len(set(o.lower() for o in options)) != len(options):
             return self._error("Options must be unique")
-        self.dismiss((name, coltype, options, assign_colors(options, chosen)))
+        self.dismiss(
+            ColumnSpec(
+                name=name,
+                type=coltype,
+                options=options,
+                colors=assign_colors(options, chosen),
+                unique=self.query_one("#unique", Checkbox).value,
+            )
+        )
 
     def _error(self, message: str) -> None:
         self.query_one("#error", Static).update(f"[red]{message}[/]")

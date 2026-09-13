@@ -103,6 +103,19 @@ def test_only_so_many_changes_are_kept(sheet):
     assert len(sheet._undo) == UNDO_LIMIT
 
 
+def test_undo_keeps_every_field_of_a_column(sheet):
+    """A snapshot that forgets a field silently undoes settings nobody touched."""
+    ident = sheet.add_column(
+        "Id", T.SELECT, ["A", "B"], {"A": "green", "B": "red"}, unique=True
+    )
+    sheet.add_row()
+    sheet.undo()                                   # undoes the added row
+    same = [c for c in sheet.columns() if c.name == "Id"][0]
+    assert (same.type, same.options, same.colors, same.unique) == (
+        T.SELECT, ["A", "B"], {"A": "green", "B": "red"}, True
+    )
+
+
 def test_what_was_undone_is_on_disk_too(tmp_path):
     path = tmp_path / "s.gridly"
     sheet = Sheet(path)

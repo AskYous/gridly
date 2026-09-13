@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS columns (
     type     TEXT NOT NULL,
     options  TEXT NOT NULL DEFAULT '[]',
     colors   TEXT NOT NULL DEFAULT '{}',
+    unique_  INTEGER NOT NULL DEFAULT 0,
     position INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS rows (
@@ -49,6 +50,8 @@ class Column:
     type: ColumnType
     options: list[str] = field(default_factory=list)
     colors: dict[str, str] = field(default_factory=dict)
+    #: No two rows may hold the same value. Empty cells are not compared.
+    unique: bool = False
     position: int = 0
 
     def color(self, option: str | None) -> str | None:
@@ -110,6 +113,11 @@ class Sheet:
                 "ALTER TABLE columns ADD COLUMN colors TEXT NOT NULL DEFAULT '{}'"
             )
             self.db.commit()
+        if "unique_" not in present:
+            self.db.execute(
+                "ALTER TABLE columns ADD COLUMN unique_ INTEGER NOT NULL DEFAULT 0"
+            )
+            self.db.commit()
 
     def close(self) -> None:
         self.db.close()
@@ -122,33 +130,29 @@ class Sheet:
 
     # ------------------------------------------------------------------ undo
 
+    #: The tables a snapshot covers, in the order they can be put back.
+    _TABLES = ("columns", "rows", "cells")
+
     def _capture(self) -> tuple:
-        """Everything in the sheet, as plain rows."""
-        return (
-            self.db.execute(
-                "SELECT id, name, type, options, colors, position FROM columns"
-            ).fetchall(),
-            self.db.execute("SELECT id, position FROM rows").fetchall(),
-            self.db.execute("SELECT row_id, column_id, value FROM cells").fetchall(),
+        """Everything in the sheet, as plain rows.
+
+        Every field of every table, rather than a list of names — a snapshot
+        that names its columns is one more place to forget when a new one is
+        added, and forgetting it means undo quietly drops the field.
+        """
+        return tuple(
+            [tuple(r) for r in self.db.execute(f"SELECT * FROM {table}")]
+            for table in self._TABLES
         )
 
     def _put_back(self, state: tuple) -> None:
-        columns, rows, cells = state
-        self.db.execute("DELETE FROM cells")
-        self.db.execute("DELETE FROM rows")
-        self.db.execute("DELETE FROM columns")
-        self.db.executemany(
-            "INSERT INTO columns (id, name, type, options, colors, position) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            [tuple(c) for c in columns],
-        )
-        self.db.executemany(
-            "INSERT INTO rows (id, position) VALUES (?, ?)", [tuple(r) for r in rows]
-        )
-        self.db.executemany(
-            "INSERT INTO cells (row_id, column_id, value) VALUES (?, ?, ?)",
-            [tuple(c) for c in cells],
-        )
+        for table in reversed(self._TABLES):        # cells reference the rest
+            self.db.execute(f"DELETE FROM {table}")
+        for table, saved in zip(self._TABLES, state):
+            if not saved:
+                continue
+            places = ", ".join("?" * len(saved[0]))
+            self.db.executemany(f"INSERT INTO {table} VALUES ({places})", saved)
         self.db.commit()
 
     def _checkpoint(self, label: str) -> None:
@@ -198,7 +202,7 @@ class Sheet:
 
     def columns(self) -> list[Column]:
         rows = self.db.execute(
-            "SELECT id, name, type, options, colors, position FROM columns "
+            "SELECT id, name, type, options, colors, unique_, position FROM columns "
             "ORDER BY position, id"
         ).fetchall()
         return [
@@ -208,6 +212,7 @@ class Sheet:
                 type=ColumnType(r["type"]),
                 options=json.loads(r["options"]),
                 colors=json.loads(r["colors"] or "{}"),
+                unique=bool(r["unique_"]),
                 position=r["position"],
             )
             for r in rows
@@ -248,25 +253,28 @@ class Sheet:
         coltype: ColumnType,
         options: list[str] | None = None,
         colors: dict[str, str] | None = None,
+        unique: bool = False,
     ) -> Column:
         self._checkpoint(f"add column {name!r}")
         position = self.db.execute(
             "SELECT COALESCE(MAX(position), -1) + 1 AS p FROM columns"
         ).fetchone()["p"]
         cursor = self.db.execute(
-            "INSERT INTO columns (name, type, options, colors, position) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO columns (name, type, options, colors, unique_, position) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
             (
                 name,
                 coltype.value,
                 json.dumps(options or []),
                 json.dumps(colors or {}),
+                int(unique),
                 position,
             ),
         )
         self.db.commit()
         return Column(
-            cursor.lastrowid, name, coltype, options or [], colors or {}, position
+            cursor.lastrowid, name, coltype, options or [], colors or {},
+            unique, position,
         )
 
     def update_column(
@@ -276,6 +284,7 @@ class Sheet:
         coltype: ColumnType,
         options: list[str] | None = None,
         colors: dict[str, str] | None = None,
+        unique: bool = False,
     ) -> int:
         """Rename / retype a column. Returns how many cells were dropped in the process."""
         old = self.column(column_id)
@@ -307,13 +316,14 @@ class Sheet:
                 )
 
         self.db.execute(
-            "UPDATE columns SET name = ?, type = ?, options = ?, colors = ? "
-            "WHERE id = ?",
+            "UPDATE columns SET name = ?, type = ?, options = ?, colors = ?, "
+            "unique_ = ? WHERE id = ?",
             (
                 name,
                 coltype.value,
                 json.dumps(options),
                 json.dumps(colors or {}),
+                int(unique),
                 column_id,
             ),
         )
@@ -361,6 +371,31 @@ class Sheet:
         self.db.commit()
         return cursor.lastrowid
 
+    # ---------------------------------------------------------- uniqueness
+
+    def holder_of(self, column_id: int, value: Any, ignoring: int = 0) -> int | None:
+        """Which row already has this value in this column, if any.
+
+        An empty cell is not a value, so any number of rows may have one.
+        Returns the row's number as shown in the grid, counting from one.
+        """
+        column = self.column(column_id)
+        if column is None or not column.unique or value is None:
+            return None
+        for number, row in enumerate(self.rows(), start=1):
+            if row.id != ignoring and row.values.get(column_id) == value:
+                return number
+        return None
+
+    def repeats_in(self, column_id: int) -> list[Any]:
+        """Values this column holds more than once — what stops it being unique."""
+        seen: dict[Any, int] = {}
+        for row in self.rows():
+            value = row.values.get(column_id)
+            if value is not None:
+                seen[value] = seen.get(value, 0) + 1
+        return [value for value, count in seen.items() if count > 1]
+
     def duplicate_row(self, row_id: int) -> int:
         """Copy a row's values into a new row directly below it."""
         with self.change("duplicate row"):
@@ -372,11 +407,16 @@ class Sheet:
             raise KeyError(row_id)
         copy_id = self.add_row(after_position=row.position)
         # Copying the stored text rather than the decoded values keeps every
-        # type exactly as it was, junk in a retyped column included.
+        # type exactly as it was, junk in a retyped column included. A column
+        # that has to be unique is left empty instead — a copy of it would be
+        # the one thing the column does not allow.
+        unique = [c.id for c in self.columns() if c.unique]
+        skip = ",".join("?" * len(unique))
         self.db.execute(
             "INSERT INTO cells (row_id, column_id, value) "
-            "SELECT ?, column_id, value FROM cells WHERE row_id = ?",
-            (copy_id, row_id),
+            "SELECT ?, column_id, value FROM cells WHERE row_id = ? "
+            f"AND column_id NOT IN ({skip})",
+            (copy_id, row_id, *unique),
         )
         self.db.commit()
         return copy_id

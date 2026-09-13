@@ -23,6 +23,7 @@ from .coltypes import ColumnType, ValidationError, color_style, display, parse
 from .screens import (
     CellEditScreen,
     ColumnScreen,
+    ColumnSpec,
     ConfirmScreen,
     ExportScreen,
     HelpScreen,
@@ -603,7 +604,18 @@ class GridlyApp(App[None]):
             return
         self._write(row, column, None)
 
+    def _clash(self, row: Row, column: Column, value: Any) -> str | None:
+        """Why this value cannot go in this cell, if it cannot."""
+        holder = self.sheet.holder_of(column.id, value, ignoring=row.id)
+        if holder is None:
+            return None
+        return f"{column.name} has to be unique — row {holder} already has that"
+
     def _write(self, row: Row, column: Column, value: Any) -> None:
+        complaint = self._clash(row, column, value)
+        if complaint:
+            self.notify(complaint + ".", severity="error")
+            return
         self.sheet.set_cell(row.id, column.id, value)
         row.values[column.id] = value
         if self.appearance.wrapping:
@@ -649,7 +661,16 @@ class GridlyApp(App[None]):
                 f"Saved row {number}." if changed else f"Row {number} unchanged."
             )
 
-        self.push_screen(RowFormScreen(self._columns, row, number, len(self._rows)), done)
+        self.push_screen(
+            RowFormScreen(
+                self._columns,
+                row,
+                number,
+                len(self._rows),
+                clash=lambda column, value: self._clash(row, column, value),
+            ),
+            done,
+        )
 
     # ------------------------------------------------------------------ copy
 
@@ -768,7 +789,10 @@ class GridlyApp(App[None]):
         self._apply_paste(plan, shape, new_rows, clipped)
 
     def _apply_paste(self, plan, shape: str, new_rows: int, clipped: int) -> None:
-        skipped = 0
+        skipped = repeated = 0
+        # Values this paste has already used, so a block that repeats itself is
+        # caught as well as one that clashes with what is already there.
+        laid: dict[int, set] = {}
         with self.sheet.change(f"paste {shape}"):
             for _ in range(new_rows):
                 self.sheet.add_row()
@@ -779,7 +803,15 @@ class GridlyApp(App[None]):
                 except ValidationError:
                     skipped += 1
                     continue
-                self.sheet.set_cell(rows[record_index].id, column.id, value)
+                row = rows[record_index]
+                if column.unique and value is not None:
+                    used = laid.setdefault(column.id, set())
+                    taken = self.sheet.holder_of(column.id, value, ignoring=row.id)
+                    if value in used or taken is not None:
+                        repeated += 1
+                        continue
+                    used.add(value)
+                self.sheet.set_cell(row.id, column.id, value)
 
         self.reload()
         parts = [f"Pasted {shape}, u to undo"]
@@ -789,10 +821,16 @@ class GridlyApp(App[None]):
             parts.append(
                 f"{skipped} {_plural(skipped, 'value')} did not fit the column type"
             )
+        if repeated:
+            parts.append(
+                f"{repeated} {_plural(repeated, 'value')} would have repeated a "
+                "unique column"
+            )
         if clipped:
             parts.append(f"{clipped} {_plural(clipped, 'column')} ran off the end")
         self.notify(
-            " · ".join(parts), severity="warning" if skipped or clipped else "information"
+            " · ".join(parts),
+            severity="warning" if skipped or clipped or repeated else "information",
         )
 
     # ------------------------------------------------------------------- rows
@@ -842,7 +880,11 @@ class GridlyApp(App[None]):
         record, field = at.row, at.column
         self.sheet.duplicate_row(row.id)
         self.reload(Coordinate(record + 1, field))
-        self.notify(f"Row {number} copied to row {number + 1}.")
+        unique = [c.name for c in self._columns if c.unique]
+        note = f"Row {number} copied to row {number + 1}."
+        if unique:
+            note += f" {', '.join(unique)} left empty, being unique."
+        self.notify(note)
 
     def action_delete_row(self) -> None:
         row = self.current_row()
@@ -856,14 +898,15 @@ class GridlyApp(App[None]):
     # ---------------------------------------------------------------- columns
 
     def action_add_column(self) -> None:
-        def done(result: tuple[str, ColumnType, list[str], dict[str, str]] | None) -> None:
-            if result is None:
+        def done(spec: ColumnSpec | None) -> None:
+            if spec is None:
                 return
-            name, coltype, options, colors = result
             record = self.table.cursor_coordinate.row
-            self.sheet.add_column(name, coltype, options, colors)
+            self.sheet.add_column(
+                spec.name, spec.type, spec.options, spec.colors, spec.unique
+            )
             self.reload(Coordinate(record, len(self._columns)))
-            self.notify(f"Added column {name!r} ({coltype.label}).")
+            self.notify(f"Added column {spec.name!r} ({spec.type.label}).")
 
         self.push_screen(ColumnScreen(), done)
 
@@ -873,21 +916,31 @@ class GridlyApp(App[None]):
             self.notify("No column here.", severity="warning")
             return
 
-        def done(result: tuple[str, ColumnType, list[str], dict[str, str]] | None) -> None:
-            if result is None:
+        def done(spec: ColumnSpec | None) -> None:
+            if spec is None:
                 return
-            name, coltype, options, colors = result
+            if spec.unique and not column.unique:
+                repeats = self.sheet.repeats_in(column.id)
+                if repeats:
+                    shown = ", ".join(repr(str(r)) for r in repeats[:3])
+                    more = "…" if len(repeats) > 3 else ""
+                    self.notify(
+                        f"{column.name!r} cannot be unique yet: {shown}{more} "
+                        f"{'appear' if len(repeats) > 1 else 'appears'} more than once.",
+                        severity="error",
+                    )
+                    return
             dropped = self.sheet.update_column(
-                column.id, name, coltype, options, colors
+                column.id, spec.name, spec.type, spec.options, spec.colors, spec.unique
             )
             self.reload()
             if dropped:
                 self.notify(
-                    f"{dropped} value(s) did not fit {coltype.label} and were cleared.",
+                    f"{dropped} value(s) did not fit {spec.type.label} and were cleared.",
                     severity="warning",
                 )
             else:
-                self.notify(f"Updated column {name!r}.")
+                self.notify(f"Updated column {spec.name!r}.")
 
         self.push_screen(ColumnScreen(column), done)
 
