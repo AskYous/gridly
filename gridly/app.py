@@ -16,7 +16,7 @@ from textual.coordinate import Coordinate
 from textual.message import Message
 from textual.screen import Screen
 from textual.timer import Timer
-from textual.widgets import DataTable, Footer, Header, Static
+from textual.widgets import DataTable, Footer, Header, Input, Static
 
 from . import config
 from .coltypes import ColumnType, ValidationError, color_style, display, parse
@@ -83,6 +83,9 @@ class GridlyApp(App[None]):
         Binding("s", "toggle_row_size", "Size", show=False),
         Binding("w", "cycle_column_width", "Width", show=False),
         Binding("W", "toggle_overflow", "Wrap", show=False),
+        Binding("slash", "search", "Find", show=False, key_display="/"),
+        Binding("n", "next_match", "Next match", show=False),
+        Binding("N", "previous_match", "Previous match", show=False),
         Binding("u", "undo", "Undo", show=False),
         Binding("U", "redo", "Redo", show=False),
         Binding("y", "copy_cell", "Copy", show=False),
@@ -123,6 +126,9 @@ class GridlyApp(App[None]):
         ("copy_cell", "Copy cell or selection", "To the clipboard, tab separated", True),
         ("copy_row", "Copy row", "The whole record, tab separated", True),
         ("export", "Export to CSV", "Write the sheet out as a file", True),
+        ("search", "Find", "Look for text anywhere in the sheet", True),
+        ("next_match", "Next match", "Jump to the match after this one", True),
+        ("previous_match", "Previous match", "Jump to the match before this one", True),
         ("undo", "Undo", "Take back the last change", True),
         ("redo", "Redo", "Put back what undo took away", True),
         ("toggle_row_size", "Toggle row height", "Between one line and three", True),
@@ -158,6 +164,11 @@ class GridlyApp(App[None]):
         # they raise arrives later — anything left over is the user moving away,
         # which drops the selection.
         self._cycle_timer: Timer | None = None
+        # What was last searched for, where it was found, and where the cursor
+        # was before the search started, to go back to if it is abandoned.
+        self._query = ""
+        self._matches: list[Coordinate] = []
+        self._search_origin: Coordinate | None = None
         self._anchor: Coordinate | None = None
         self._selected: set[Coordinate] = set()
         self._extending = 0
@@ -169,6 +180,9 @@ class GridlyApp(App[None]):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Grid(id="grid", cursor_type="cell", zebra_stripes=True)
+        search = Input(placeholder="find…", id="search")
+        search.display = False
+        yield search
         yield Static("", id="status")
         yield Footer(compact=True)
 
@@ -210,6 +224,7 @@ class GridlyApp(App[None]):
         previous = cursor or table.cursor_coordinate
         self._anchor = None
         self._selected = set()
+        self._matches = []
         table.clear(columns=True)
 
         self._columns = self.sheet.columns()
@@ -247,6 +262,8 @@ class GridlyApp(App[None]):
             table.cursor_coordinate = Coordinate(
                 min(record, len(self._rows) - 1), min(field, len(self._columns) - 1)
             )
+        if self._query:
+            self._look_for(self._query)  # the rows may not be the same ones
         self._update_status()
 
     def _room(self) -> tuple[int, int]:
@@ -261,6 +278,16 @@ class GridlyApp(App[None]):
         column = self.current_column()
         shape = f"{rows} {_plural(rows, 'row')} × {columns} {_plural(columns, 'column')}"
         detail = ""
+        if self._matches:
+            here = self.table.cursor_coordinate
+            at = next(
+                (i for i, found in enumerate(self._matches) if found == here), None
+            )
+            where = f"{at + 1} of " if at is not None else ""
+            detail += (
+                f"  ·  {where}{len(self._matches)} "
+                f"{_plural(len(self._matches), 'match')} for {self._query!r}"
+            )
         region = self._selection_region()
         if region is not None:
             start, end = region
@@ -316,6 +343,88 @@ class GridlyApp(App[None]):
         column = self._columns[field] if 0 <= field < len(self._columns) else None
         return row, column
 
+    # --------------------------------------------------------------- finding
+
+    def action_search(self) -> None:
+        """Open the bar and look as they type."""
+        if not self._rows or not self._columns:
+            self.notify("Nothing to search yet.", severity="warning")
+            return
+        self._search_origin = self.table.cursor_coordinate
+        bar = self.query_one("#search", Input)
+        bar.display = True
+        bar.value = self._query
+        bar.focus()
+
+    @on(Input.Changed, "#search")
+    def searching(self, event: Input.Changed) -> None:
+        self._look_for(event.value)
+        if self._matches:
+            self._go_to(self._first_from(self._search_origin))
+
+    @on(Input.Submitted, "#search")
+    def search_done(self) -> None:
+        """Keep the matches lit and hand the grid back."""
+        self._close_search()
+        if self._query and not self._matches:
+            self.notify(f"No sign of {self._query!r}.", severity="warning")
+
+    def _close_search(self) -> None:
+        bar = self.query_one("#search", Input)
+        bar.display = False
+        self.table.focus()
+        self._update_status()
+
+    def _look_for(self, query: str) -> None:
+        """Every cell whose text contains the query, reading left to right."""
+        was = set(self._matches)
+        self._query = query
+        needle = query.strip().lower()
+        self._matches = (
+            [
+                Coordinate(record, field)
+                for record, row in enumerate(self._rows)
+                for field, column in enumerate(self._columns)
+                if needle in display(column.type, row.values.get(column.id)).lower()
+            ]
+            if needle
+            else []
+        )
+        for coordinate in was | set(self._matches):
+            self._repaint(coordinate, coordinate in self._selected)
+        self._update_status()
+
+    def _first_from(self, start: Coordinate | None) -> int:
+        """The match at or after where the search began, wrapping round."""
+        if start is None:
+            return 0
+        for index, found in enumerate(self._matches):
+            if (found.row, found.column) >= (start.row, start.column):
+                return index
+        return 0
+
+    def _go_to(self, index: int) -> None:
+        if self._matches:
+            self.table.cursor_coordinate = self._matches[index % len(self._matches)]
+
+    def _step(self, by: int) -> None:
+        if not self._matches:
+            self.notify(
+                "Nothing to step through — press / to search.", severity="warning"
+            )
+            return
+        here = self.table.cursor_coordinate
+        at = next(
+            (i for i, found in enumerate(self._matches) if found == here), None
+        )
+        self._go_to(self._first_from(here) + by if at is None else at + by)
+
+    def action_next_match(self) -> None:
+        self._step(1)
+
+    def action_previous_match(self) -> None:
+        self._step(-1)
+
     # ------------------------------------------------------------- selection
 
     def _selection_region(self) -> tuple[Coordinate, Coordinate] | None:
@@ -362,6 +471,9 @@ class GridlyApp(App[None]):
         if selected:
             text = text.copy()
             text.stylize(f"on {self.theme_variables.get('primary-darken-2', 'blue')}")
+        elif coordinate in self._matches:
+            text = text.copy()
+            text.stylize(f"on {self.theme_variables.get('warning-darken-3', 'yellow')}")
         self.table.update_cell_at(coordinate, text)
 
     def action_extend(self, down: int, across: int) -> None:
@@ -382,6 +494,13 @@ class GridlyApp(App[None]):
         self._refresh_selection()
 
     def action_clear_selection(self) -> None:
+        """Escape: back to one cell, and no search."""
+        if self.query_one("#search", Input).display:
+            self._close_search()
+            if self._search_origin is not None:
+                self.table.cursor_coordinate = self._search_origin
+        if self._matches:
+            self._look_for("")
         self._clear_selection()
 
     def _clear_selection(self) -> None:
@@ -799,7 +918,9 @@ class GridlyApp(App[None]):
         self.sheet.close()
 
 def _plural(count: int, word: str) -> str:
-    return word if count == 1 else word + "s"
+    if count == 1:
+        return word
+    return word + ("es" if word.endswith(("s", "x", "ch", "sh")) else "s")
 
 
 def _short_path(path: Path) -> str:

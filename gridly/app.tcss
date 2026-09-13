@@ -258,3 +258,15 @@ PickerApp {
 #reset {
     margin-top: 2;
 }
+
+/* The find bar, which only appears while searching. */
+#search {
+    height: 1;
+    border: none;
+    padding: 0 1;
+    background: $boost;
+}
+
+#search:focus {
+    background: $primary 40%;
+}

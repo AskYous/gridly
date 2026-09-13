@@ -117,6 +117,8 @@ where it can't, telling you how many it dropped.
 | `e`         | edit the current column (name, type, options) |
 | `x`         | delete the current column                     |
 | `[` / `]`   | move the current column left / right          |
+| `/`         | search every cell                             |
+| `n` / `N`   | next / previous match                         |
 | shift+arrows| select a block of cells                       |
 | `esc`       | drop the selection                            |
 | `y`         | copy the selection, or just this cell         |
@@ -272,6 +274,20 @@ remembered in the config so the next launch opens the way you left it.
 Small is one line per row, which is the tightest the grid goes. Large is three,
 which gives a multi-line text value room to show its later lines instead of
 folding them onto the first, and sits every value in the middle of its row.
+
+## Searching
+
+`/` opens a bar at the bottom and looks as you type, across every column,
+ignoring case. It matches what you can see rather than what is stored, so
+`yes` finds a ticked box and `2026-09` finds a date. Every match lights up and
+the status line counts them — `1 of 6 matches for 'waseem'`.
+
+`enter` hands the grid back with the matches still lit, and `n` and `N` walk
+through them, wrapping round at the ends. `esc` gives up and puts the cursor
+back where it was before you started.
+
+Matches follow the sheet: edit a cell or delete a row and the count and
+highlights are worked out again.
 
 ## Copying out
 

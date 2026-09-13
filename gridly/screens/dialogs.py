@@ -96,6 +96,11 @@ class HelpScreen(ModalScreen[None]):
             ("c / e / x", "Add / edit / delete a column"),
             ("[ / ]", "Move the column left / right"),
         ]),
+        ("Finding things in the sheet", [
+            ("/", "Search every cell as you type"),
+            ("n / N", "Jump to the next / previous match"),
+            ("esc", "Give up on the search"),
+        ]),
         ("Clipboard", [
             ("shift+arrows", "Select a block of cells"),
             ("esc", "Drop the selection"),
