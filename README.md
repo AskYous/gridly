@@ -219,6 +219,13 @@ Colours show in the grid, in the picker you get when editing a cell, and in the
 status line. Sheets made before colours existed pick them up from the palette
 without being rewritten.
 
+## Where values sit in a column
+
+Booleans, dates, times and dropdowns go down the middle of their column: they
+are all of a size and usually shorter than the heading above them, so against
+the left edge they read as stranded. Text and numbers stay left, where prose
+and figures are read from.
+
 ## Multi-line text
 
 A text column holds newlines. A row shows as many of them as its height allows

@@ -242,22 +242,28 @@ def centred(cell: Text, height: int, lines: int | None = None) -> Text:
     return padded
 
 
+#: Types whose values are shorter than their heading and all of a size, so
+#: they read better down the middle of the column than against its left edge.
+CENTRED = (ColumnType.BOOLEAN, ColumnType.DATE, ColumnType.TIME, ColumnType.SELECT)
+
+
 def render(column: Column, value: Any, lines: int) -> Text:
     """How a value looks inside the grid."""
+    across = "center" if column.type in CENTRED else None
     if value is None:
-        return Text("·", "dim")
+        return Text("·", "dim", justify=across)
     if column.type is ColumnType.BOOLEAN:
-        # A tick is one character in a column as wide as its heading, so it
-        # sits in the middle rather than hard against the left edge.
         return (
-            Text("✓", "green", justify="center")
+            Text("✓", "green", justify=across)
             if value
-            else Text("✗", "red dim", justify="center")
+            else Text("✗", "red dim", justify=across)
         )
     if column.type is ColumnType.NUMBER:
         return Text(display(column.type, value), "cyan")
     if column.type in (ColumnType.DATE, ColumnType.TIME):
-        return Text(display(column.type, value, column.format), "magenta")
+        return Text(display(column.type, value, column.format), "magenta", justify=across)
     if column.type is ColumnType.SELECT:
-        return Text(display(column.type, value), color_style(column.color(value)))
+        return Text(
+            display(column.type, value), color_style(column.color(value)), justify=across
+        )
     return fit(display(column.type, value), lines)

@@ -1,7 +1,6 @@
 """The measurements behind how the grid is drawn."""
 
-import os
-import tempfile
+import datetime
 
 import pytest
 from rich.text import Text
@@ -9,13 +8,14 @@ from rich.text import Text
 from gridly.coltypes import ColumnType
 from gridly.store import Column
 from gridly.appearance import (
+    CENTRED,
     COLUMN_CAPS,
     COLUMN_WIDTHS,
     MAX_WRAP_LINES,
-    PADDING,
     MIN_FIT_WIDTH,
     OVERFLOWS,
-        Appearance,
+    PADDING,
+    Appearance,
     centred,
     fair_cap,
     fit,
@@ -261,10 +261,30 @@ def test_a_tick_sits_in_the_middle_of_its_column():
 
 @pytest.mark.parametrize(
     "coltype, value",
-    [(ColumnType.TEXT, "x"), (ColumnType.NUMBER, 1), (ColumnType.DATE, None)],
+    [
+        (ColumnType.BOOLEAN, True),
+        (ColumnType.DATE, datetime.date(2026, 9, 13)),
+        (ColumnType.TIME, datetime.time(9, 30)),
+        (ColumnType.SELECT, "Low"),
+    ],
 )
-def test_everything_else_is_left_where_it_is(coltype, value):
+def test_short_and_even_values_go_down_the_middle(coltype, value):
+    assert render(column(coltype, options=["Low"]), value, 1).justify == "center"
+
+
+@pytest.mark.parametrize(
+    "coltype, value",
+    [(ColumnType.TEXT, "x"), (ColumnType.TEXT, "a\nb"), (ColumnType.NUMBER, 1)],
+)
+def test_text_and_numbers_stay_against_the_left_edge(coltype, value):
+    """Prose and figures are read down their left edge, not from the middle."""
     assert render(column(coltype), value, 1).justify is None
+
+
+@pytest.mark.parametrize("coltype", list(ColumnType))
+def test_an_empty_cell_is_placed_like_the_rest_of_its_column(coltype):
+    expected = "center" if coltype in CENTRED else None
+    assert render(column(coltype), None, 1).justify == expected
 
 
 def test_centring_a_row_keeps_how_the_value_is_placed_across_it():
