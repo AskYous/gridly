@@ -222,7 +222,13 @@ def centred(cell: Text, height: int, lines: int | None = None) -> Text:
     """Sit a value in the middle of its row rather than at the top of it."""
     occupied = cell.plain.count("\n") + 1 if lines is None else lines
     above = (height - occupied) // 2
-    return Text("\n" * above) + cell if above > 0 else cell
+    if above <= 0:
+        return cell
+    # Adding Texts together drops how the result should be justified, so it is
+    # carried over by hand — otherwise a tick loses its centring in a tall row.
+    padded = Text("\n" * above) + cell
+    padded.justify = cell.justify
+    return padded
 
 
 def render(column: Column, value: Any, lines: int) -> Text:
@@ -230,7 +236,13 @@ def render(column: Column, value: Any, lines: int) -> Text:
     if value is None:
         return Text("·", "dim")
     if column.type is ColumnType.BOOLEAN:
-        return Text("✓", "green") if value else Text("✗", "red dim")
+        # A tick is one character in a column as wide as its heading, so it
+        # sits in the middle rather than hard against the left edge.
+        return (
+            Text("✓", "green", justify="center")
+            if value
+            else Text("✗", "red dim", justify="center")
+        )
     if column.type is ColumnType.NUMBER:
         return Text(display(column.type, value), "cyan")
     if column.type is ColumnType.DATE:

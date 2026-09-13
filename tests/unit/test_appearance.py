@@ -20,6 +20,7 @@ from gridly.appearance import (
     fair_cap,
     fit,
     lines_needed,
+    render,
     widest,
 )
 
@@ -218,3 +219,30 @@ def test_fitting_with_no_room_yet_falls_back_to_what_values_need():
     """The table has no width until it has been laid out once."""
     view = Appearance(column_width="fit")
     assert view.widths([Text("A")], [[Text("abc")]], 0, 0, 2) == [3]
+
+
+# ------------------------------------------------------- horizontal placing
+
+def test_a_tick_sits_in_the_middle_of_its_column():
+    """A boolean is one character in a column as wide as its heading."""
+    for value in (True, False):
+        assert render(column(ColumnType.BOOLEAN), value, 1).justify == "center"
+
+
+@pytest.mark.parametrize(
+    "coltype, value",
+    [(ColumnType.TEXT, "x"), (ColumnType.NUMBER, 1), (ColumnType.DATE, None)],
+)
+def test_everything_else_is_left_where_it_is(coltype, value):
+    assert render(column(coltype), value, 1).justify is None
+
+
+def test_centring_a_row_keeps_how_the_value_is_placed_across_it():
+    cell = render(column(ColumnType.BOOLEAN), True, 1)
+    assert centred(cell, 5).justify == "center"
+
+
+def test_a_drawn_boolean_cell_is_still_centred():
+    """Through Appearance.cell, which is what the grid actually gets."""
+    cell = Appearance(row_size="large").cell(column(ColumnType.BOOLEAN), True)
+    assert cell.justify == "center"
