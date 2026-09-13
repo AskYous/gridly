@@ -285,6 +285,7 @@ class Sheet:
         options: list[str] | None = None,
         colors: dict[str, str] | None = None,
         unique: bool = False,
+        renames: dict[str, str] | None = None,
     ) -> int:
         """Rename / retype a column. Returns how many cells were dropped in the process."""
         old = self.column(column_id)
@@ -293,6 +294,19 @@ class Sheet:
         self._checkpoint(f"edit column {old.name!r}")
         options = options or []
         dropped = 0
+
+        # An option that was renamed takes its values with it. Without this,
+        # every cell holding the old wording fails to match the new options and
+        # is cleared — losing data for what was meant to be a wording change.
+        if renames:
+            for cell in self.db.execute(
+                "SELECT row_id, value FROM cells WHERE column_id = ?", (column_id,)
+            ).fetchall():
+                if cell["value"] in renames:
+                    self.db.execute(
+                        "UPDATE cells SET value = ? WHERE row_id = ? AND column_id = ?",
+                        (renames[cell["value"]], cell["row_id"], column_id),
+                    )
 
         if old.type is not coltype or (
             coltype is ColumnType.SELECT and options != old.options

@@ -936,14 +936,25 @@ class GridlyApp(App[None]):
                     )
                     return
             dropped = self.sheet.update_column(
-                column.id, spec.name, spec.type, spec.options, spec.colors, spec.unique
+                column.id,
+                spec.name,
+                spec.type,
+                spec.options,
+                spec.colors,
+                spec.unique,
+                spec.renames,
             )
             self.reload()
             if dropped:
                 self.notify(
-                    f"{dropped} value(s) did not fit {spec.type.label} and were cleared.",
+                    f"Updated {spec.name!r}, but {dropped} "
+                    f"{_plural(dropped, 'value')} no longer fit and "
+                    f"{'were' if dropped > 1 else 'was'} cleared. u to undo.",
                     severity="warning",
                 )
+            elif spec.renames:
+                moved = ", ".join(f"{was} → {now}" for was, now in spec.renames.items())
+                self.notify(f"Renamed {moved}. The values came with it.")
             else:
                 self.notify(f"Updated column {spec.name!r}.")
 

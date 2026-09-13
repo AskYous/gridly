@@ -29,6 +29,8 @@ class ColumnSpec:
     options: list[str] = field(default_factory=list)
     colors: dict[str, str] = field(default_factory=dict)
     unique: bool = False
+    #: Options that were reworded, old name to new, so the values can follow.
+    renames: dict[str, str] = field(default_factory=dict)
 
 
 class OptionRow(Horizontal):
@@ -58,6 +60,11 @@ class OptionRow(Horizontal):
             classes="option-color",
         )
         yield Button("✕", compact=True, classes="option-remove")
+
+    @property
+    def was(self) -> str:
+        """What this option was called when the form opened."""
+        return self.option_name
 
     @property
     def option(self) -> tuple[str, str | None]:
@@ -154,6 +161,7 @@ class ColumnScreen(ModalScreen[ColumnSpec | None]):
         coltype = self._selected_type()
         options: list[str] = []
         chosen: dict[str, str] = {}
+        renames: dict[str, str] = {}
         for row in self.query(OptionRow):
             label, color = row.option
             if not label:
@@ -161,6 +169,8 @@ class ColumnScreen(ModalScreen[ColumnSpec | None]):
             options.append(label)
             if color:
                 chosen[label] = color
+            if row.was and row.was != label:
+                renames[row.was] = label
 
         if not name:
             return self._error("Give the column a name")
@@ -175,6 +185,7 @@ class ColumnScreen(ModalScreen[ColumnSpec | None]):
                 options=options,
                 colors=assign_colors(options, chosen),
                 unique=self.query_one("#unique", Checkbox).value,
+                renames=renames,
             )
         )
 

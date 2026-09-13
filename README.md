@@ -189,6 +189,12 @@ case are refused, and so is an empty list.
     + add option
 ```
 
+Rewording an option takes its values with it: change *Doing* to *In progress*
+and every cell that said *Doing* now says *In progress*. Gridly knows which
+option row was which, so renaming two at once — even swapping their names —
+does the right thing. Removing an option is the one thing that clears cells,
+and it says how many and that `u` puts them back.
+
 Leave a colour unset and one is taken from the palette in the order the options
 are listed, so a Low/Medium/High column reads green, yellow, red without you
 choosing anything. The nine colours are `green`, `yellow`, `red`, `blue`,
