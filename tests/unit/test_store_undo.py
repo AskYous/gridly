@@ -16,15 +16,21 @@ def sheet(tmp_path):
     sheet.add_column("Name", T.TEXT)
     sheet.add_column("Qty", T.NUMBER)
     sheet.add_row()
+    sheet.add_row()           # two, so a row has somewhere to move to
     sheet._undo.clear()
     yield sheet
     sheet.close()
 
 
 def snapshot(sheet):
+    """What the sheet holds, in the order it holds it.
+
+    Row ids are part of it, so reordering two rows that happen to hold the
+    same thing still counts as a change.
+    """
     columns = sheet.columns()
     return [c.name for c in columns], [
-        [r.values.get(c.id) for c in columns] for r in sheet.rows()
+        (r.id, [r.values.get(c.id) for c in columns]) for r in sheet.rows()
     ]
 
 
@@ -42,6 +48,7 @@ def test_a_new_sheet_has_nothing_to_undo(tmp_path):
         ("add column", lambda s: s.add_column("New", T.TEXT)),
         ("delete column", lambda s: s.delete_column(s.columns()[0].id)),
         ("move column", lambda s: s.move_column(s.columns()[1].id, -1)),
+        ("move row", lambda s: s.move_row(s.rows()[-1].id, -1)),
         ("edit column", lambda s: s.update_column(
             s.columns()[0].id, "Renamed", T.TEXT)),
     ],

@@ -100,6 +100,8 @@ class GridlyApp(App[None]):
         Binding("c", "add_column", "+Col"),
         Binding("e", "edit_column", "Edit col", show=False),
         Binding("x", "delete_column", "-Col", show=False),
+        Binding("ctrl+up", "move_row(-1)", "Move row up", show=False),
+        Binding("ctrl+down", "move_row(1)", "Move row down", show=False),
         Binding("left_square_bracket", "move_column(-1)", "Move col left", show=False),
         Binding("right_square_bracket", "move_column(1)", "Move col right", show=False),
         Binding("comma", "settings", "Settings", key_display=","),
@@ -122,6 +124,8 @@ class GridlyApp(App[None]):
         ("add_column", "Add column", "Define a new column and its type", True),
         ("edit_column", "Edit column", "Rename, retype or relist the current column", True),
         ("delete_column", "Delete column", "Remove the column and every value in it", True),
+        ("move_row(-1)", "Move row up", "Swap it with the row above", True),
+        ("move_row(1)", "Move row down", "Swap it with the row below", True),
         ("move_column(-1)", "Move column left", "Swap it with the column before it", True),
         ("move_column(1)", "Move column right", "Swap it with the column after it", True),
         ("copy_cell", "Copy cell or selection", "To the clipboard, tab separated", True),
@@ -952,6 +956,15 @@ class GridlyApp(App[None]):
         self.sheet.delete_column(column.id)
         self.reload()
         self.notify(f"Deleted column {column.name!r}. u to undo.")
+
+    def action_move_row(self, offset: int) -> None:
+        """Swap the row under the cursor with the one above or below it."""
+        row = self.current_row()
+        if row is None:
+            return
+        at = self.table.cursor_coordinate
+        if self.sheet.move_row(row.id, offset):
+            self.reload(Coordinate(at.row + offset, at.column))
 
     def action_move_column(self, offset: int) -> None:
         column = self.current_column()

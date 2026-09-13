@@ -116,6 +116,7 @@ where it can't, telling you how many it dropped.
 | `c`         | add a column                                  |
 | `e`         | edit the current column (name, type, options) |
 | `x`         | delete the current column                     |
+| ctrl+↑/↓    | move the current row up / down                |
 | `[` / `]`   | move the current column left / right          |
 | `/`         | search every cell                             |
 | `n` / `N`   | next / previous match                         |

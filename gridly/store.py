@@ -355,6 +355,24 @@ class Sheet:
         self.db.commit()
         return True
 
+    def move_row(self, row_id: int, offset: int) -> bool:
+        """Swap a row with the one beside it. False if there is none."""
+        self._checkpoint("move row")
+        rows = self.rows()
+        index = next((i for i, r in enumerate(rows) if r.id == row_id), None)
+        if index is None:
+            return False
+        target = index + offset
+        if not 0 <= target < len(rows):
+            return False
+        rows[index], rows[target] = rows[target], rows[index]
+        for position, row in enumerate(rows):
+            self.db.execute(
+                "UPDATE rows SET position = ? WHERE id = ?", (position, row.id)
+            )
+        self.db.commit()
+        return True
+
     def add_row(self, after_position: int | None = None) -> int:
         self._checkpoint("add row")
         if after_position is None:
