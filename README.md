@@ -126,7 +126,7 @@ where it can't, telling you how many it dropped.
 | `Y`         | copy the whole row, tab separated             |
 | `E`         | export the sheet to a CSV file                |
 | `cmd/ctrl+v`| paste cells copied from a spreadsheet         |
-| `,`         | settings: width, wrapping, row height, theme  |
+| `,`         | settings: width, wrapping, padding, theme     |
 | `t`         | change the colour theme                       |
 | `ctrl+p`    | command palette — every command, searchable   |
 | `?`         | help                                          |
@@ -276,8 +276,11 @@ scrolls rather than reducing every column to nothing.
 `W` decides what a capped column does with a value too long for it — end it in
 an ellipsis, or wrap it. Wrapping grows each row to fit its tallest value, up
 to twelve lines, so a row of short values stays one line high and only the long
-one takes the space. `s` sets the row height for the ellipsis side, where every
-row is the same height whatever is in it:
+one takes the space.
+
+`s` adds a blank line above and below every value, wrapped or not — the sheet
+reads less like a wall. It used to be a choice of two row heights, which did
+nothing at all while values were wrapping, since they set their own height.
 
 ```
  Task       Done  Note                                  Qty

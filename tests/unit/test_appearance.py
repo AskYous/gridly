@@ -12,10 +12,10 @@ from gridly.appearance import (
     COLUMN_CAPS,
     COLUMN_WIDTHS,
     MAX_WRAP_LINES,
+    PADDING,
     MIN_FIT_WIDTH,
     OVERFLOWS,
-    ROW_SIZES,
-    Appearance,
+        Appearance,
     centred,
     fair_cap,
     fit,
@@ -126,7 +126,7 @@ def test_the_defaults_are_all_real_choices():
     view = Appearance()
     assert view.column_width in COLUMN_WIDTHS
     assert view.overflow in OVERFLOWS
-    assert view.row_size in ROW_SIZES
+    assert isinstance(view.padded, bool)
 
 
 def test_cycling_comes_back_round(tmp_path, monkeypatch):
@@ -148,7 +148,7 @@ def test_unreadable_settings_fall_back_to_the_defaults(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     config = tmp_path / "gridly" / "config.json"
     config.parent.mkdir(parents=True)
-    config.write_text('{"column_width": "enormous", "row_size": 7, "overflow": null}')
+    config.write_text('{"column_width": "enormous", "padded": 7, "overflow": null}')
     assert Appearance.load() == Appearance()
 
 
@@ -173,12 +173,12 @@ def test_a_wrapping_cell_is_left_whole_for_the_row_to_grow_around():
 
 
 def test_a_fixed_row_is_always_the_same_height():
-    view = Appearance(row_size="large", overflow="ellipsis")
-    assert view.row_height([Text(LONG)], [10]) == ROW_SIZES["large"]
+    view = Appearance(padded=True, overflow="ellipsis")
+    assert view.row_height([Text(LONG)], [10]) == 1 + 2 * PADDING
 
 
 def test_a_wrapping_row_is_as_tall_as_its_tallest_value():
-    view = Appearance(row_size="small", overflow="wrap", column_width="small")
+    view = Appearance(overflow="wrap", column_width="small")
     assert view.row_height([Text("short"), Text("a" * 40)], [10, 10]) == 4
 
 
@@ -244,5 +244,5 @@ def test_centring_a_row_keeps_how_the_value_is_placed_across_it():
 
 def test_a_drawn_boolean_cell_is_still_centred():
     """Through Appearance.cell, which is what the grid actually gets."""
-    cell = Appearance(row_size="large").cell(column(ColumnType.BOOLEAN), True)
+    cell = Appearance(padded=True).cell(column(ColumnType.BOOLEAN), True)
     assert cell.justify == "center"

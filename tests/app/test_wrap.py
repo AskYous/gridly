@@ -3,7 +3,7 @@ os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp()
 from textual.coordinate import Coordinate
 from textual.widgets import DataTable, TextArea
 from gridly.app import GridlyApp
-from gridly.appearance import COLUMN_CAPS, MAX_WRAP_LINES, ROW_SIZES
+from gridly.appearance import COLUMN_CAPS, MAX_WRAP_LINES, PADDING
 from gridly.coltypes import ColumnType
 from gridly.store import Sheet
 
@@ -29,10 +29,10 @@ async def main():
         print("ellipsis, small rows :", heights(app), "| wrapping:", app.appearance.wrapping)
         assert heights(app) == [1, 1]
 
-        # --- W alone grows the row; row_size is untouched
+        # --- W alone grows the row, without needing the padding toggle
         await pilot.press("W"); await pilot.pause()
-        print("wrap, row_size still :", app.appearance.row_size, "->", heights(app))
-        assert app.appearance.row_size == "small", "wrapping should not need the row-size toggle"
+        print("wrap, padding still :", app.appearance.padded, "->", heights(app))
+        assert app.appearance.padded is False
         assert heights(app)[0] > 1, "the long row should have grown"
         assert heights(app)[1] == 1, "a short row stays one line"
 
@@ -89,6 +89,15 @@ async def main():
         while app.appearance.column_width != "large":
             await pilot.press("w"); await pilot.pause()
 
+        # --- padding applies while wrapping too, which it used to ignore
+        while not app.appearance.padded:
+            await pilot.press("s"); await pilot.pause()
+        padded = heights(app)
+        await pilot.press("s"); await pilot.pause()
+        bare = heights(app)
+        print("padding while wrapping:", bare, "->", padded)
+        assert padded == [h + 2 * PADDING for h in bare], (padded, bare)
+
         # --- a selection survives the redraw that re-heights the row
         t.cursor_coordinate = Coordinate(0, 1); await pilot.pause()
         await pilot.press("shift+down"); await pilot.pause()
@@ -107,13 +116,13 @@ async def main():
         await pilot.press("escape"); await pilot.pause()
 
 
-        # --- turning wrapping off puts row_size back in charge
+        # --- turning wrapping off leaves flat rows, padding aside
         await pilot.press("W"); await pilot.pause()
         print("ellipsis again       :", heights(app))
-        assert heights(app) == [ROW_SIZES[app.appearance.row_size]] * 2
+        assert heights(app) == [1 + app.appearance.spare] * 2
         await pilot.press("s"); await pilot.pause()
-        print("s with ellipsis      :", app.appearance.row_size, heights(app))
-        assert heights(app) == [ROW_SIZES["large"]] * 2
+        print("s with ellipsis      :", app.appearance.padded, heights(app))
+        assert heights(app) == [1 + 2 * PADDING] * 2
     print("ALL WRAP TESTS DONE")
 
 def test_wrap():

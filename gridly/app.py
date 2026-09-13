@@ -38,7 +38,6 @@ from .store import Column, Row, Sheet
 from .appearance import (
     COLUMN_WIDTHS,
     OVERFLOWS,
-    ROW_SIZES,
     Appearance,
     centred,
     field_label,
@@ -81,7 +80,7 @@ class GridlyApp(App[None]):
         Binding("shift+up", "extend(-1, 0)", "Select up", show=False),
         Binding("shift+down", "extend(1, 0)", "Select down", show=False),
         Binding("escape", "clear_selection", "Drop selection", show=False),
-        Binding("s", "toggle_row_size", "Size", show=False),
+        Binding("s", "toggle_padding", "Padding", show=False),
         Binding("w", "cycle_column_width", "Width", show=False),
         Binding("W", "toggle_overflow", "Wrap", show=False),
         Binding("slash", "search", "Find", show=False, key_display="/"),
@@ -137,8 +136,8 @@ class GridlyApp(App[None]):
         ("previous_match", "Previous match", "Jump to the match before this one", True),
         ("undo", "Undo", "Take back the last change", True),
         ("redo", "Redo", "Put back what undo took away", True),
-        ("toggle_row_size", "Toggle row height", "Between one line and three", True),
-        ("settings", "Settings", "Width, wrapping, row height and theme", True),
+        ("toggle_padding", "Toggle row padding", "A blank line above and below each value", True),
+        ("settings", "Settings", "Width, wrapping, padding and theme", True),
         ("cycle_column_width", "Cycle column width", "Large, fit to the screen, small, or uncapped", True),
         ("toggle_overflow", "Toggle wrapping", "A long value wraps over the row, or ends in an ellipsis", True),
         ("help", "Show Gridly's keys", "The keyboard reference", True),
@@ -555,17 +554,15 @@ class GridlyApp(App[None]):
                 severity="warning",
             )
 
-    def action_toggle_row_size(self) -> None:
-        """Swap the row height for the other one."""
-        self.appearance.cycle_row_size()
+    def action_toggle_padding(self) -> None:
+        """A blank line above and below each value, or none."""
+        self.appearance.toggle_padding()
         self.reload()
-        self._show_cycle("row height", tuple(ROW_SIZES), self.appearance.row_size)
-        if self.appearance.wrapping:
-            self.notify(
-                "Wrapping is on, so rows grow to fit whatever they hold."
-                " Press W for a fixed height.",
-                severity="warning",
-            )
+        self._show_cycle(
+            "row padding",
+            ("none", "a line either side"),
+            "a line either side" if self.appearance.padded else "none",
+        )
 
     @on(DataTable.CellHighlighted)
     def cell_highlighted(self) -> None:

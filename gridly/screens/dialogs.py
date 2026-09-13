@@ -113,7 +113,7 @@ class HelpScreen(ModalScreen[None]):
         ("How it looks", [
             ("w", "Width: large, fit, small, uncapped"),
             ("W", "Wrap long values, or cut with …"),
-            ("s", "Row height: one line or three"),
+            ("s", "Padding: a blank line above and below"),
             (",", "Settings: all of the above in one page"),
             ("t", "Change the colour theme"),
         ]),

@@ -27,7 +27,7 @@ async def main():
         # --- every view setting is on the page
         await pilot.press("comma"); await pilot.pause()
         assert isinstance(app.screen, SettingsScreen), app.screen
-        for key in ("column_width", "overflow", "row_size"):
+        for key in ("column_width", "overflow", "padded"):
             assert app.screen.query_one(f"#set-{key}", Select).value == getattr(
                 app.appearance, key
             )
@@ -36,7 +36,7 @@ async def main():
         # --- changing them and saving takes effect
         pick(app, "column_width", "small")
         pick(app, "overflow", "wrap")
-        pick(app, "row_size", "large")
+        pick(app, "padded", True)
         await pilot.pause()
         await pilot.press("ctrl+s"); await pilot.pause()
         print("after save   :", app.appearance)

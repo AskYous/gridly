@@ -21,10 +21,9 @@ from . import config
 from .coltypes import ColumnType, color_style, display
 from .store import Column
 
-# How many lines a row gets on screen. Both are odd heights, so a single-line
-# value has as many blank lines above it as below.
-ROW_SIZES = {"small": 1, "large": 3}
-DEFAULT_ROW_SIZE = "small"
+# A padded row gets this many blank lines above its value, and as many below.
+PADDING = 1
+DEFAULT_PADDED = False
 
 # How wide a column may get, in the order w cycles them. These are caps, not
 # widths: a column narrower than its cap keeps its own size, so a yes/no column
@@ -38,7 +37,7 @@ DEFAULT_COLUMN_WIDTH = "fit"
 MIN_FIT_WIDTH = 6
 
 # What a capped column does with a value too long for it. Wrapping grows the
-# row to fit, so row_size only applies to the ellipsis side.
+# row to fit whatever it holds; padding is added on top either way.
 OVERFLOWS = ("ellipsis", "wrap")
 DEFAULT_OVERFLOW = "ellipsis"
 
@@ -50,7 +49,8 @@ MAX_WRAP_LINES = 12
 class Appearance:
     """How a sheet looks. Never changes what is in it, or which of it is shown."""
 
-    row_size: str = DEFAULT_ROW_SIZE
+    #: A blank line above and below each value, whatever height it needs.
+    padded: bool = DEFAULT_PADDED
     column_width: str = DEFAULT_COLUMN_WIDTH
     overflow: str = DEFAULT_OVERFLOW
 
@@ -58,19 +58,21 @@ class Appearance:
     def load(cls) -> Appearance:
         """The settings from last time, ignoring anything unrecognisable."""
         saved = config.load()
-        view = cls()
-        if saved.get("row_size") in ROW_SIZES:
-            view.row_size = saved["row_size"]
+        appearance = cls()
+        if isinstance(saved.get("padded"), bool):
+            appearance.padded = saved["padded"]
+        elif saved.get("row_size") in ("small", "large"):
+            appearance.padded = saved["row_size"] == "large"  # what it used to be
         if saved.get("column_width") in COLUMN_WIDTHS:
-            view.column_width = saved["column_width"]
+            appearance.column_width = saved["column_width"]
         if saved.get("overflow") in OVERFLOWS:
-            view.overflow = saved["overflow"]
-        return view
+            appearance.overflow = saved["overflow"]
+        return appearance
 
     def save(self) -> None:
         """Write the settings that outlive the session."""
         config.save(
-            row_size=self.row_size,
+            padded=self.padded,
             column_width=self.column_width,
             overflow=self.overflow,
         )
@@ -85,9 +87,9 @@ class Appearance:
         self.overflow = _next(OVERFLOWS, self.overflow)
         config.save(overflow=self.overflow)
 
-    def cycle_row_size(self) -> None:
-        self.row_size = _next(tuple(ROW_SIZES), self.row_size)
-        config.save(row_size=self.row_size)
+    def toggle_padding(self) -> None:
+        self.padded = not self.padded
+        config.save(padded=self.padded)
 
     # -------------------------------------------------------------- drawing
 
@@ -101,12 +103,17 @@ class Appearance:
         """Wrapping needs a cap to wrap against, so both settings have to agree."""
         return self.overflow == "wrap" and self.capped
 
+    @property
+    def spare(self) -> int:
+        """Blank lines a padded row adds, above and below together."""
+        return 2 * PADDING if self.padded else 0
+
     def cell(self, column: Column, value: Any) -> Text:
         """A value drawn for the row height that is in force."""
         if self.wrapping:
             # The row will be grown to fit this, so nothing is squeezed or cut.
             return render(column, value, MAX_WRAP_LINES)
-        height = ROW_SIZES[self.row_size]
+        height = 1 + self.spare
         drawn = centred(render(column, value, height), height)
         if self.capped:
             drawn.no_wrap = True
@@ -114,14 +121,14 @@ class Appearance:
         return drawn
 
     def row_height(self, cells: list[Text], widths: list[int | None]) -> int:
-        """How many lines a row needs once its values have wrapped."""
+        """How many lines a row needs, padding included."""
         if not self.wrapping:
-            return ROW_SIZES[self.row_size]
+            return 1 + self.spare
         needed = max(
             (lines_needed(cell, width) for cell, width in zip(cells, widths)),
             default=1,
         )
-        return min(max(1, needed), MAX_WRAP_LINES)
+        return min(max(1, needed), MAX_WRAP_LINES) + self.spare
 
     def centre(
         self, cells: list[Text], widths: list[int | None], height: int

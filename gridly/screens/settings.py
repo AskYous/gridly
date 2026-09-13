@@ -36,12 +36,12 @@ SETTINGS = [
         ],
     ),
     (
-        "row_size",
-        "Row height",
-        "How tall a row is. Ignored while values wrap, since they set their own.",
+        "padded",
+        "Row padding",
+        "A blank line above and below each value, whatever height it needs.",
         [
-            ("small — one line", "small"),
-            ("large — three lines", "large"),
+            ("none — rows are as tall as their values", False),
+            ("a line either side — roomier", True),
         ],
     ),
 ]
