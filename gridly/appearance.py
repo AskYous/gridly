@@ -113,7 +113,8 @@ class Appearance:
         if self.wrapping:
             # The row will be grown to fit this, so nothing is squeezed or cut.
             return render(column, value, MAX_WRAP_LINES)
-        drawn = indented(render(column, value, 1), PADDING if self.padded else 0)
+        height = 1 + self.spare
+        drawn = centred(render(column, value, height), height)
         if self.capped:
             drawn.no_wrap = True
             drawn.overflow = "ellipsis"
@@ -129,16 +130,20 @@ class Appearance:
         )
         return min(max(1, needed), MAX_WRAP_LINES) + self.spare
 
-    def place(self, cells: list[Text]) -> list[Text]:
-        """Start every value on the same line, whatever height it needs.
+    def place(
+        self, cells: list[Text], widths: list[int | None], height: int
+    ) -> list[Text]:
+        """Sit every value in the middle of the row its tallest neighbour set.
 
-        Centring each one against the row instead put a short value a line
-        below a tall one, so nothing in a row lined up with anything else.
+        A short value stranded at the top of a row nine lines tall reads as a
+        mistake, so each one is centred against the whole row, padding included.
         """
         if not self.wrapping:
-            return cells  # cell() has already padded these
-        above = PADDING if self.padded else 0
-        return [indented(cell, above) for cell in cells]
+            return cells  # cell() has already centred these
+        return [
+            centred(cell, height, lines_needed(cell, width))
+            for cell, width in zip(cells, widths)
+        ]
 
     def widths(
         self,
@@ -224,8 +229,10 @@ def lines_needed(cell: Text, width: int | None) -> int:
     )
 
 
-def indented(cell: Text, above: int) -> Text:
-    """Push a value down by a fixed number of blank lines."""
+def centred(cell: Text, height: int, lines: int | None = None) -> Text:
+    """Sit a value in the middle of the height it has been given."""
+    occupied = cell.plain.count("\n") + 1 if lines is None else lines
+    above = (height - occupied) // 2
     if above <= 0:
         return cell
     # Adding Texts together drops how the result should be justified, so it is

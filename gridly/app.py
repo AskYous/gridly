@@ -38,10 +38,10 @@ from .store import Column, Row, Sheet
 from .appearance import (
     COLUMN_WIDTHS,
     OVERFLOWS,
-    PADDING,
     Appearance,
+    centred,
     field_label,
-    indented,
+    lines_needed,
     widest,
 )
 
@@ -254,12 +254,12 @@ class GridlyApp(App[None]):
         for number, row in enumerate(self._rows, start=1):
             cells = [drawn[column.id][number - 1] for column in self._columns]
             height = self.appearance.row_height(cells, widths)
-            cells = self.appearance.place(cells)
+            cells = self.appearance.place(cells, widths, height)
             table.add_row(
                 *cells,
                 height=height,
                 key=str(row.id),
-                label=indented(Text(str(number), "dim"), PADDING if self.appearance.padded else 0),
+                label=centred(Text(str(number), "dim"), height),
             )
 
         if self._rows and self._columns:
@@ -467,7 +467,12 @@ class GridlyApp(App[None]):
             return
         text = self.appearance.cell(column, row.values.get(column.id))
         if self.appearance.wrapping:
-            text = indented(text, PADDING if self.appearance.padded else 0)
+            table = self.table
+            text = centred(
+                text,
+                table.ordered_rows[coordinate.row].height,
+                lines_needed(text, table.ordered_columns[coordinate.column].width),
+            )
         if selected:
             text = text.copy()
             text.stylize(f"on {self.theme_variables.get('primary-darken-2', 'blue')}")

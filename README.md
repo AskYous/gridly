@@ -279,8 +279,8 @@ to twelve lines, so a row of short values stays one line high and only the long
 one takes the space.
 
 `s` adds a blank line above and below every value, wrapped or not — the sheet
-reads less like a wall. Every value in a row starts on the same line, however
-many lines each of them needs, so a row reads straight across. It used to be a choice of two row heights, which did
+reads less like a wall. A value shorter than its row sits in the middle of it,
+so a single word beside a cell nine lines tall is not left stranded at the top. It used to be a choice of two row heights, which did
 nothing at all while values were wrapping, since they set their own height.
 
 ```

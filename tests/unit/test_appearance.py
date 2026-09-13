@@ -16,7 +16,7 @@ from gridly.appearance import (
     MIN_FIT_WIDTH,
     OVERFLOWS,
         Appearance,
-    indented,
+    centred,
     fair_cap,
     fit,
     lines_needed,
@@ -80,38 +80,52 @@ def test_tabs_would_break_the_columns_so_they_become_spaces():
 
 # --------------------------------------------------------------- placing
 
-@pytest.mark.parametrize("above", [0, 1, 3])
-def test_a_value_is_pushed_down_by_exactly_what_it_is_given(above):
-    out = indented(Text("x"), above).plain
-    assert len(out) - len(out.lstrip("\n")) == above
+@pytest.mark.parametrize(
+    "height, expected_blank_lines", [(1, 0), (2, 0), (3, 1), (4, 1), (5, 2), (11, 5)]
+)
+def test_a_one_line_value_sits_in_the_middle(height, expected_blank_lines):
+    out = centred(Text("x"), height).plain
+    assert len(out) - len(out.lstrip("\n")) == expected_blank_lines
 
 
-def test_no_padding_leaves_the_value_alone():
-    cell = Text("a\nb\nc")
-    assert indented(cell, 0) is cell
+def test_a_value_as_tall_as_its_row_is_not_pushed_down():
+    assert centred(Text("a\nb\nc"), 3).plain == "a\nb\nc"
 
 
-def test_placing_keeps_how_the_value_is_laid_out_across_its_column():
-    assert indented(Text("✓", justify="center"), 2).justify == "center"
+def test_centring_can_be_told_how_tall_the_value_really_is():
+    """Once wrapped, a value takes more lines than its newlines suggest."""
+    assert centred(Text("x"), 5, lines=3).plain == "\nx"
 
 
-@pytest.mark.parametrize("padded", [False, True])
-def test_everything_in_a_row_starts_on_the_same_line(padded):
-    """A short value beside a tall one used to sit a line lower than it."""
-    appearance = Appearance(padded=padded, overflow="wrap", column_width="small")
-    cells = [Text("a" * 45), Text("x"), Text("b" * 20)]
+def test_centring_keeps_how_the_value_is_laid_out_across_its_column():
+    assert centred(Text("✓", justify="center"), 5).justify == "center"
+
+
+def test_a_short_value_is_not_stranded_at_the_top_of_a_tall_row():
+    """Nine lines in one cell and a word in the next: the word goes in the middle."""
+    appearance = Appearance(padded=True, overflow="wrap", column_width="small")
+    cells = [Text("t\n" * 8 + "t"), Text("Sunday")]
+    widths = [16, 16]
+    height = appearance.row_height(cells, widths)
+    placed = appearance.place(cells, widths, height)
+    above = len(placed[1].plain) - len(placed[1].plain.lstrip("\n"))
+    assert height == 11
+    assert above == (height - 1) // 2, above
+
+
+def test_values_of_the_same_height_line_up_with_each_other():
+    appearance = Appearance(overflow="wrap", column_width="small")
+    cells = [Text("a" * 40), Text("b" * 40), Text("c")]
     widths = [16, 16, 16]
-    starts = {
-        len(cell.plain) - len(cell.plain.lstrip("\n"))
-        for cell in appearance.place(cells)
-    }
-    assert starts == {PADDING if padded else 0}
+    height = appearance.row_height(cells, widths)
+    placed = appearance.place(cells, widths, height)
+    starts = [len(c.plain) - len(c.plain.lstrip("\n")) for c in placed]
+    assert starts[0] == starts[1]
 
 
 def test_a_padded_row_is_taller_than_what_it_holds_by_the_padding():
     appearance = Appearance(padded=True, overflow="wrap", column_width="small")
-    cells, widths = [Text("a" * 45)], [16]
-    assert appearance.row_height(cells, widths) == 3 + 2 * PADDING
+    assert appearance.row_height([Text("a" * 45)], [16]) == 3 + 2 * PADDING
 
 
 # ------------------------------------------------------------ sharing width
@@ -255,10 +269,10 @@ def test_everything_else_is_left_where_it_is(coltype, value):
 
 def test_centring_a_row_keeps_how_the_value_is_placed_across_it():
     cell = render(column(ColumnType.BOOLEAN), True, 1)
-    assert indented(cell, 5).justify == "center"
+    assert centred(cell, 5).justify == "center"
 
 
-def test_a_drawn_boolean_cell_is_still_indented():
+def test_a_drawn_boolean_cell_is_still_centred():
     """Through Appearance.cell, which is what the grid actually gets."""
     cell = Appearance(padded=True).cell(column(ColumnType.BOOLEAN), True)
     assert cell.justify == "center"
