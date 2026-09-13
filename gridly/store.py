@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS columns (
     options  TEXT NOT NULL DEFAULT '[]',
     colors   TEXT NOT NULL DEFAULT '{}',
     unique_  INTEGER NOT NULL DEFAULT 0,
+    format   TEXT NOT NULL DEFAULT '',
     position INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS rows (
@@ -52,6 +53,9 @@ class Column:
     colors: dict[str, str] = field(default_factory=dict)
     #: No two rows may hold the same value. Empty cells are not compared.
     unique: bool = False
+    #: How the type writes itself, where it has a choice — see the type's own
+    #: formats, such as TIME_FORMATS.
+    format: str = ""
     position: int = 0
 
     def color(self, option: str | None) -> str | None:
@@ -116,6 +120,11 @@ class Sheet:
         if "unique_" not in present:
             self.db.execute(
                 "ALTER TABLE columns ADD COLUMN unique_ INTEGER NOT NULL DEFAULT 0"
+            )
+            self.db.commit()
+        if "format" not in present:
+            self.db.execute(
+                "ALTER TABLE columns ADD COLUMN format TEXT NOT NULL DEFAULT ''"
             )
             self.db.commit()
 
@@ -202,7 +211,8 @@ class Sheet:
 
     def columns(self) -> list[Column]:
         rows = self.db.execute(
-            "SELECT id, name, type, options, colors, unique_, position FROM columns "
+            "SELECT id, name, type, options, colors, unique_, format, position "
+            "FROM columns "
             "ORDER BY position, id"
         ).fetchall()
         return [
@@ -213,6 +223,7 @@ class Sheet:
                 options=json.loads(r["options"]),
                 colors=json.loads(r["colors"] or "{}"),
                 unique=bool(r["unique_"]),
+                format=r["format"],
                 position=r["position"],
             )
             for r in rows
@@ -254,27 +265,30 @@ class Sheet:
         options: list[str] | None = None,
         colors: dict[str, str] | None = None,
         unique: bool = False,
+        fmt: str = "",
     ) -> Column:
         self._checkpoint(f"add column {name!r}")
         position = self.db.execute(
             "SELECT COALESCE(MAX(position), -1) + 1 AS p FROM columns"
         ).fetchone()["p"]
         cursor = self.db.execute(
-            "INSERT INTO columns (name, type, options, colors, unique_, position) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO columns "
+            "(name, type, options, colors, unique_, format, position) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (
                 name,
                 coltype.value,
                 json.dumps(options or []),
                 json.dumps(colors or {}),
                 int(unique),
+                fmt,
                 position,
             ),
         )
         self.db.commit()
         return Column(
             cursor.lastrowid, name, coltype, options or [], colors or {},
-            unique, position,
+            unique, fmt, position,
         )
 
     def update_column(
@@ -286,6 +300,7 @@ class Sheet:
         colors: dict[str, str] | None = None,
         unique: bool = False,
         renames: dict[str, str] | None = None,
+        fmt: str = "",
     ) -> int:
         """Rename / retype a column. Returns how many cells were dropped in the process."""
         old = self.column(column_id)
@@ -319,7 +334,9 @@ class Sheet:
                 if value is None:
                     continue
                 try:
-                    converted = parse(coltype, display(old.type, value), options)
+                    converted = parse(
+                        coltype, display(old.type, value, old.format), options, fmt
+                    )
                 except Exception:
                     converted = None
                 if converted is None:
@@ -331,13 +348,14 @@ class Sheet:
 
         self.db.execute(
             "UPDATE columns SET name = ?, type = ?, options = ?, colors = ?, "
-            "unique_ = ? WHERE id = ?",
+            "unique_ = ?, format = ? WHERE id = ?",
             (
                 name,
                 coltype.value,
                 json.dumps(options),
                 json.dumps(colors or {}),
                 int(unique),
+                fmt,
                 column_id,
             ),
         )

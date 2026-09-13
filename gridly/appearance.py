@@ -256,8 +256,8 @@ def render(column: Column, value: Any, lines: int) -> Text:
         )
     if column.type is ColumnType.NUMBER:
         return Text(display(column.type, value), "cyan")
-    if column.type is ColumnType.DATE:
-        return Text(display(column.type, value), "magenta")
+    if column.type in (ColumnType.DATE, ColumnType.TIME):
+        return Text(display(column.type, value, column.format), "magenta")
     if column.type is ColumnType.SELECT:
         return Text(display(column.type, value), color_style(column.color(value)))
     return fit(display(column.type, value), lines)

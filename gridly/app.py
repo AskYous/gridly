@@ -390,7 +390,10 @@ class GridlyApp(App[None]):
                 Coordinate(record, field)
                 for record, row in enumerate(self._rows)
                 for field, column in enumerate(self._columns)
-                if needle in display(column.type, row.values.get(column.id)).lower()
+                if needle
+                in display(
+                    column.type, row.values.get(column.id), column.format
+                ).lower()
             ]
             if needle
             else []
@@ -695,20 +698,22 @@ class GridlyApp(App[None]):
         if column is None or row is None:
             return
         value = row.values.get(column.id)
-        self._copy(display(column.type, value), f"{column.name} cell")
+        self._copy(display(column.type, value, column.format), f"{column.name} cell")
 
     def _text_at(self, coordinate: Coordinate) -> str:
         row, column = self._cell_at(coordinate)
         if row is None or column is None:
             return ""
-        return display(column.type, row.values.get(column.id))
+        return display(column.type, row.values.get(column.id), column.format)
 
     def action_copy_row(self) -> None:
         """Put the whole row on the clipboard as a spreadsheet would write it."""
         row = self.current_row()
         if row is None or not self._columns:
             return
-        values = [display(c.type, row.values.get(c.id)) for c in self._columns]
+        values = [
+            display(c.type, row.values.get(c.id), c.format) for c in self._columns
+        ]
         self._copy(format_block([values]), f"row {self._rows.index(row) + 1}")
 
     def _copy(self, text: str, what: str) -> None:
@@ -801,7 +806,7 @@ class GridlyApp(App[None]):
             rows = self.sheet.rows()
             for record_index, column, raw in plan:
                 try:
-                    value = parse(column.type, raw, column.options)
+                    value = parse(column.type, raw, column.options, column.format)
                 except ValidationError:
                     skipped += 1
                     continue
@@ -905,7 +910,12 @@ class GridlyApp(App[None]):
                 return
             record = self.table.cursor_coordinate.row
             self.sheet.add_column(
-                spec.name, spec.type, spec.options, spec.colors, spec.unique
+                spec.name,
+                spec.type,
+                spec.options,
+                spec.colors,
+                spec.unique,
+                spec.format,
             )
             self.reload(Coordinate(record, len(self._columns)))
             self.notify(f"Added column {spec.name!r} ({spec.type.label}).")
@@ -940,6 +950,7 @@ class GridlyApp(App[None]):
                 spec.colors,
                 spec.unique,
                 spec.renames,
+                spec.format,
             )
             self.reload()
             if dropped:

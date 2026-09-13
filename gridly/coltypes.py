@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from enum import Enum
 from typing import Any
 
@@ -16,6 +16,7 @@ class ColumnType(str, Enum):
     NUMBER = "number"
     BOOLEAN = "boolean"
     DATE = "date"
+    TIME = "time"
     SELECT = "select"
 
     @property
@@ -37,6 +38,7 @@ _LABELS = {
     ColumnType.NUMBER: "Number",
     ColumnType.BOOLEAN: "Boolean",
     ColumnType.DATE: "Date",
+    ColumnType.TIME: "Time",
     ColumnType.SELECT: "Dropdown",
 }
 
@@ -45,6 +47,7 @@ _TAGS = {
     ColumnType.NUMBER: "123",
     ColumnType.BOOLEAN: "y/n",
     ColumnType.DATE: "cal",
+    ColumnType.TIME: "clk",
     ColumnType.SELECT: "list",
 }
 
@@ -53,6 +56,7 @@ _HINTS = {
     ColumnType.NUMBER: "e.g. 42 or 3.14",
     ColumnType.BOOLEAN: "yes / no",
     ColumnType.DATE: "YYYY-MM-DD (or 'today')",
+    ColumnType.TIME: "9:30, 14:05, 9:30 pm",
     ColumnType.SELECT: "one of the column's options",
 }
 
@@ -61,8 +65,41 @@ _FALSE_WORDS = {"0", "false", "f", "no", "n", "off", "✗"}
 
 _DATE_FORMATS = ("%Y-%m-%d", "%Y/%m/%d", "%d/%m/%Y", "%d-%m-%Y", "%d %b %Y", "%b %d %Y")
 
+# How precisely a time column is written and read. The key is what a column
+# stores in its format field; the empty one is what a column gets by default.
+TIME_FORMATS = {"": "hours and minutes", "seconds": "hours, minutes and seconds"}
 
-def parse(coltype: ColumnType, raw: str, options: list[str] | None = None) -> Any:
+
+def _parse_time(raw: str) -> time:
+    """Read a clock time. Accepts am/pm, and seconds if they are given."""
+    text = raw.lower().replace(".", "").strip()
+    # A twelve-hour time has to be spotted before the digits are read, and an
+    # offset of zero for "am" is not something to test for truth.
+    half = next((s for s in ("am", "pm") if text.endswith(s)), None)
+    if half:
+        text = text[:-2].strip()
+
+    parts = text.split(":")
+    if not 1 <= len(parts) <= 3 or not all(p.strip().isdigit() for p in parts):
+        raise ValidationError(f"{raw!r} is not a time")
+    hour, minute, second = (int(p) for p in (*parts, "0", "0")[:3])
+
+    if half:
+        if not 1 <= hour <= 12:
+            raise ValidationError(f"{raw!r} is not a time")
+        hour = hour % 12 + (12 if half == "pm" else 0)
+    try:
+        return time(hour, minute, second)
+    except ValueError:
+        raise ValidationError(f"{raw!r} is not a time") from None
+
+
+def parse(
+    coltype: ColumnType,
+    raw: str,
+    options: list[str] | None = None,
+    fmt: str = "",
+) -> Any:
     """Turn user-typed text into a stored value. Empty input means "no value"."""
     raw = raw.strip()
     if not raw:
@@ -99,6 +136,12 @@ def parse(coltype: ColumnType, raw: str, options: list[str] | None = None) -> An
                 continue
         raise ValidationError(f"{raw!r} is not a date (try YYYY-MM-DD)")
 
+    if coltype is ColumnType.TIME:
+        read = _parse_time(raw)
+        # A column that does not show seconds does not keep them either, so
+        # what is stored is always what is on screen.
+        return read if fmt == "seconds" else read.replace(second=0)
+
     if coltype is ColumnType.SELECT:
         for option in options or []:
             if option.lower() == raw.lower():
@@ -114,7 +157,7 @@ def encode(coltype: ColumnType, value: Any) -> str | None:
         return None
     if coltype is ColumnType.BOOLEAN:
         return "1" if value else "0"
-    if coltype is ColumnType.DATE:
+    if coltype in (ColumnType.DATE, ColumnType.TIME):
         return value.isoformat()
     if coltype is ColumnType.NUMBER:
         return repr(value)
@@ -130,6 +173,8 @@ def decode(coltype: ColumnType, stored: str | None) -> Any:
             return stored == "1"
         if coltype is ColumnType.DATE:
             return date.fromisoformat(stored)
+        if coltype is ColumnType.TIME:
+            return time.fromisoformat(stored)
         if coltype is ColumnType.NUMBER:
             value = float(stored)
             return int(value) if value.is_integer() else value
@@ -138,7 +183,7 @@ def decode(coltype: ColumnType, stored: str | None) -> Any:
     return stored
 
 
-def display(coltype: ColumnType, value: Any) -> str:
+def display(coltype: ColumnType, value: Any, fmt: str = "") -> str:
     """Plain-text rendering used in the grid and as the starting text when editing."""
     if value is None:
         return ""
@@ -146,6 +191,8 @@ def display(coltype: ColumnType, value: Any) -> str:
         return "yes" if value else "no"
     if coltype is ColumnType.DATE:
         return value.isoformat()
+    if coltype is ColumnType.TIME:
+        return value.strftime("%H:%M:%S" if fmt == "seconds" else "%H:%M")
     if coltype is ColumnType.NUMBER:
         if isinstance(value, int):
             return str(value)

@@ -24,6 +24,9 @@ def write_csv(path: str | Path, columns: list[Column], rows: list[Row]) -> Path:
         writer.writerow([column.name for column in columns])
         for row in rows:
             writer.writerow(
-                [display(column.type, row.values.get(column.id)) for column in columns]
+                [
+                    display(column.type, row.values.get(column.id), column.format)
+                    for column in columns
+                ]
             )
     return path

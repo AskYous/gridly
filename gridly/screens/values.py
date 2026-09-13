@@ -36,9 +36,13 @@ def build_editor(column: Column, value: Any, field_id: str):
         )
     if column.type is ColumnType.TEXT:
         # Text may contain newlines — a single-line Input would hide all but the first.
-        return TextArea(display(column.type, value), soft_wrap=True, id=field_id)
+        return TextArea(
+            display(column.type, value, column.format), soft_wrap=True, id=field_id
+        )
     return Input(
-        value=display(column.type, value), placeholder=column.type.hint, id=field_id
+        value=display(column.type, value, column.format),
+        placeholder=column.type.hint,
+        id=field_id,
     )
 
 
@@ -84,7 +88,12 @@ class CellEditScreen(ModalScreen[tuple[bool, Any]]):
     @on(Input.Submitted)
     def action_save(self) -> None:
         try:
-            parsed = parse(self.column.type, read_editor(self.query_one("#value")), self.column.options)
+            parsed = parse(
+                self.column.type,
+                read_editor(self.query_one("#value")),
+                self.column.options,
+                self.column.format,
+            )
         except ValidationError as error:
             self.query_one("#error", Static).update(f"[red]{error}[/]")
             return
@@ -200,7 +209,7 @@ class RowFormScreen(ModalScreen[dict[int, Any] | None]):
                 continue
             try:
                 values[column.id] = parse(
-                    column.type, read_editor(field), column.options
+                    column.type, read_editor(field), column.options, column.format
                 )
             except ValidationError as error:
                 return self._refuse(field, f"{column.name}: {error}")

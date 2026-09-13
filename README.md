@@ -89,6 +89,7 @@ run has nothing to list, so it just opens `./sheet.gridly` as before.
 | Number   | `42`, `3.14`, `1,200`                     |
 | Boolean  | `yes/no`, `y/n`, `true/false`, `1/0`      |
 | Date     | `2026-09-07`, `07/09/2026`, `today`       |
+| Time     | `9:30`, `14:05`, `9:30 pm`, `7`           |
 | Dropdown | one of the options you define on the column, one per line |
 
 Bad input is refused with a message instead of being stored. Changing a
@@ -153,6 +154,17 @@ command palette. Every other key is one of those two away.
 name, with a sentence saying what it means — including the things whose keys
 are easy to miss, like moving a column left or right. A test asserts every
 key binding has a palette entry, so the two cannot drift apart.
+
+## Times
+
+A time column takes `9:30`, `14:05`, `9:30 pm`, `9.30pm` or just `7`, and always
+shows it on a twenty-four hour clock so the column reads and sorts straight.
+
+Each time column says how precise it is: hours and minutes, or seconds as well.
+A column that does not show seconds does not keep them either — type `9:30:45`
+into one and it stores `09:30`, so what is in the file is what is on screen.
+Switch the column to seconds later and the times you already have read as
+`09:30:00`.
 
 ## Unique columns
 

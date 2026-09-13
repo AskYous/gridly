@@ -10,7 +10,13 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Checkbox, Input, Label, Select, Static
 
-from ..coltypes import OPTION_COLORS, ColumnType, assign_colors, color_style
+from ..coltypes import (
+    OPTION_COLORS,
+    TIME_FORMATS,
+    ColumnType,
+    assign_colors,
+    color_style,
+)
 from dataclasses import dataclass, field
 
 from ..store import Column
@@ -29,6 +35,8 @@ class ColumnSpec:
     options: list[str] = field(default_factory=list)
     colors: dict[str, str] = field(default_factory=dict)
     unique: bool = False
+    #: How the type writes itself, where it has a choice.
+    format: str = ""
     #: Options that were reworded, old name to new, so the values can follow.
     renames: dict[str, str] = field(default_factory=dict)
 
@@ -104,6 +112,15 @@ class ColumnScreen(ModalScreen[ColumnSpec | None]):
                         allow_blank=False,
                         id="type",
                     )
+                    yield Label(
+                        "Time shows", classes="field-label", id="format-label"
+                    )
+                    yield Select(
+                        [(about, key) for key, about in TIME_FORMATS.items()],
+                        value=(column.format if column else "") or "",
+                        allow_blank=False,
+                        id="format",
+                    )
                     yield Label("Options", classes="field-label", id="options-label")
                     with Vertical(id="options"):
                         for option in column.options if column else []:
@@ -129,7 +146,12 @@ class ColumnScreen(ModalScreen[ColumnSpec | None]):
         return ColumnType(self.query_one("#type", Select).value)
 
     def _sync_options_field(self) -> None:
-        is_dropdown = self._selected_type() is ColumnType.SELECT
+        """Only show what the chosen type actually has to say."""
+        coltype = self._selected_type()
+        is_dropdown = coltype is ColumnType.SELECT
+        is_time = coltype is ColumnType.TIME
+        self.query_one("#format-label", Label).display = is_time
+        self.query_one("#format", Select).display = is_time
         self.query_one("#options-label", Label).display = is_dropdown
         self.query_one("#options", Vertical).display = is_dropdown
         self.query_one("#add-option", Button).display = is_dropdown
@@ -185,6 +207,7 @@ class ColumnScreen(ModalScreen[ColumnSpec | None]):
                 options=options,
                 colors=assign_colors(options, chosen),
                 unique=self.query_one("#unique", Checkbox).value,
+                format=str(self.query_one("#format", Select).value or ""),
                 renames=renames,
             )
         )
