@@ -287,6 +287,25 @@ def test_an_empty_cell_is_placed_like_the_rest_of_its_column(coltype):
     assert render(column(coltype), None, 1).justify == expected
 
 
+@pytest.mark.parametrize("coltype", list(ColumnType))
+def test_turning_centring_off_puts_everything_against_the_left(coltype):
+    appearance = Appearance(centred=False)
+    assert appearance.cell(column(coltype, options=["Low"]), None).justify is None
+
+
+@pytest.mark.parametrize("coltype", list(ColumnType))
+def test_it_is_on_unless_it_is_turned_off(coltype):
+    appearance = Appearance()
+    expected = "center" if coltype in CENTRED else None
+    assert appearance.cell(column(coltype, options=["Low"]), None).justify == expected
+
+
+def test_the_choice_is_remembered(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    Appearance(centred=False).save()
+    assert Appearance.load().centred is False
+
+
 def test_centring_a_row_keeps_how_the_value_is_placed_across_it():
     cell = render(column(ColumnType.BOOLEAN), True, 1)
     assert centred(cell, 5).justify == "center"

@@ -25,6 +25,9 @@ from .store import Column
 PADDING = 1
 DEFAULT_PADDED = False
 
+# Whether the types that suit it sit down the middle of their column.
+DEFAULT_CENTRED = True
+
 # How wide a column may get, in the order w cycles them. These are caps, not
 # widths: a column narrower than its cap keeps its own size, so a yes/no column
 # never gets padded out. "fit" has no fixed cap — it shares the viewport out
@@ -51,6 +54,9 @@ class Appearance:
 
     #: A blank line above and below each value, whatever height it needs.
     padded: bool = DEFAULT_PADDED
+    #: Booleans, dates, times and dropdowns go down the middle of their column.
+    #: Text and numbers are read from their left edge and never move.
+    centred: bool = DEFAULT_CENTRED
     column_width: str = DEFAULT_COLUMN_WIDTH
     overflow: str = DEFAULT_OVERFLOW
 
@@ -63,6 +69,8 @@ class Appearance:
             appearance.padded = saved["padded"]
         elif saved.get("row_size") in ("small", "large"):
             appearance.padded = saved["row_size"] == "large"  # what it used to be
+        if isinstance(saved.get("centred"), bool):
+            appearance.centred = saved["centred"]
         if saved.get("column_width") in COLUMN_WIDTHS:
             appearance.column_width = saved["column_width"]
         if saved.get("overflow") in OVERFLOWS:
@@ -73,6 +81,7 @@ class Appearance:
         """Write the settings that outlive the session."""
         config.save(
             padded=self.padded,
+            centred=self.centred,
             column_width=self.column_width,
             overflow=self.overflow,
         )
@@ -112,9 +121,9 @@ class Appearance:
         """A value drawn for the row height that is in force."""
         if self.wrapping:
             # The row will be grown to fit this, so nothing is squeezed or cut.
-            return render(column, value, MAX_WRAP_LINES)
+            return render(column, value, MAX_WRAP_LINES, self.centred)
         height = 1 + self.spare
-        drawn = centred(render(column, value, height), height)
+        drawn = centred(render(column, value, height, self.centred), height)
         if self.capped:
             drawn.no_wrap = True
             drawn.overflow = "ellipsis"
@@ -247,9 +256,11 @@ def centred(cell: Text, height: int, lines: int | None = None) -> Text:
 CENTRED = (ColumnType.BOOLEAN, ColumnType.DATE, ColumnType.TIME, ColumnType.SELECT)
 
 
-def render(column: Column, value: Any, lines: int) -> Text:
+def render(
+    column: Column, value: Any, lines: int, middle: bool = DEFAULT_CENTRED
+) -> Text:
     """How a value looks inside the grid."""
-    across = "center" if column.type in CENTRED else None
+    across = "center" if middle and column.type in CENTRED else None
     if value is None:
         return Text("·", "dim", justify=across)
     if column.type is ColumnType.BOOLEAN:

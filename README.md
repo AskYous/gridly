@@ -127,7 +127,7 @@ where it can't, telling you how many it dropped.
 | `Y`         | copy the whole row, tab separated             |
 | `E`         | export the sheet to a CSV file                |
 | `cmd/ctrl+v`| paste cells copied from a spreadsheet         |
-| `,`         | settings: width, wrapping, padding, theme     |
+| `,`         | settings: width, wrapping, padding, placing, theme |
 | `t`         | change the colour theme                       |
 | `ctrl+p`    | command palette — every command, searchable   |
 | `?`         | help                                          |
@@ -221,10 +221,13 @@ without being rewritten.
 
 ## Where values sit in a column
 
-Booleans, dates, times and dropdowns go down the middle of their column: they
-are all of a size and usually shorter than the heading above them, so against
-the left edge they read as stranded. Text and numbers stay left, where prose
-and figures are read from.
+Booleans, dates, times and dropdowns go down the middle of their column by
+default: they are all of a size and usually shorter than the heading above them,
+so against the left edge they read as stranded. Text and numbers stay left,
+where prose and figures are read from.
+
+If you would rather everything sat left, *Where values sit* in the settings
+page (`,`) says so. Text and numbers never move either way.
 
 ## Multi-line text
 

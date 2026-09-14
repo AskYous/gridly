@@ -36,6 +36,15 @@ SETTINGS = [
         ],
     ),
     (
+        "centred",
+        "Where values sit",
+        "Text and numbers are always read from the left, whichever you pick.",
+        [
+            ("down the middle of their column", True),
+            ("against the left edge", False),
+        ],
+    ),
+    (
         "padded",
         "Row padding",
         "A blank line above and below each value, whatever height it needs.",

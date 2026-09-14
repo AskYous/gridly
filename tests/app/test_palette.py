@@ -8,17 +8,22 @@ from gridly.coltypes import ColumnType
 from gridly.screens import ColumnScreen, ConfirmScreen, RowFormScreen
 from gridly.store import Sheet
 
-# --- every binding must be reachable from the palette, or explicitly elsewhere
+# --- every binding must be reachable from the palette, or explicitly elsewhere.
+# The other way round is allowed: a command not worth a key of its own still
+# belongs in the palette.
 actions = {b.action for b in GridlyApp.BINDINGS}
-covered = {action for action, *_ in GridlyApp.PALETTE} | GridlyApp.PALETTE_ELSEWHERE
-missing = actions - covered
-extra = {a for a, *_ in GridlyApp.PALETTE} - actions
+listed = {action for action, *_ in GridlyApp.PALETTE}
+missing = actions - listed - GridlyApp.PALETTE_ELSEWHERE
 print("bindings         :", len(actions))
 print("in the palette   :", len(GridlyApp.PALETTE))
-print("uncovered        :", missing or "none")
-print("palette-only     :", extra or "none")
+print("bindings missing from the palette:", missing or "none")
+print("palette-only commands            :", listed - actions or "none")
 assert not missing, missing
-assert not extra, extra
+
+# every palette entry has to name something the app can actually do
+assert all(
+    hasattr(GridlyApp, "action_" + action.split("(")[0]) for action in listed
+), [a for a in listed if not hasattr(GridlyApp, "action_" + a.split("(")[0])]
 
 path = pathlib.Path(tempfile.mkdtemp()) / "p.gridly"
 s = Sheet(path)

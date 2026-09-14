@@ -137,7 +137,8 @@ class GridlyApp(App[None]):
         ("undo", "Undo", "Take back the last change", True),
         ("redo", "Redo", "Put back what undo took away", True),
         ("toggle_padding", "Toggle row padding", "A blank line above and below each value", True),
-        ("settings", "Settings", "Width, wrapping, padding and theme", True),
+        ("toggle_centring", "Toggle centring", "Values down the middle of their column, or left", True),
+        ("settings", "Settings", "Width, wrapping, padding, placing and theme", True),
         ("cycle_column_width", "Cycle column width", "Large, fit to the screen, small, or uncapped", True),
         ("toggle_overflow", "Toggle wrapping", "A long value wraps over the row, or ends in an ellipsis", True),
         ("help", "Show Gridly's keys", "The keyboard reference", True),
@@ -556,6 +557,17 @@ class GridlyApp(App[None]):
                 f"Long values {self.appearance.overflow} — but nothing is capped, so press w first.",
                 severity="warning",
             )
+
+    def action_toggle_centring(self) -> None:
+        """Down the middle of the column, or against its left edge."""
+        self.appearance.centred = not self.appearance.centred
+        self.appearance.save()
+        self.reload()
+        self._show_cycle(
+            "values sit",
+            ("left", "centred"),
+            "centred" if self.appearance.centred else "left",
+        )
 
     def action_toggle_padding(self) -> None:
         """A blank line above and below each value, or none."""
