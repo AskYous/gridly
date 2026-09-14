@@ -13,11 +13,10 @@ import shlex
 import sys
 from pathlib import Path
 
-from .app import DEFAULT_FILE
-
 USAGE = """usage: gridly-web [FILE] [--host HOST] [--port PORT]
 
-Serves Gridly at http://HOST:PORT. FILE defaults to ./{default}.
+Serves Gridly at http://HOST:PORT. With no FILE, a browser session offers the
+sheets opened lately, the same as running gridly with no file.
 
 Listens on 127.0.0.1 by default. A browser session is a real Gridly process
 with this machine's file access, so only widen that on a network you trust.
@@ -27,7 +26,7 @@ with this machine's file access, so only widen that on a network you trust.
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if "-h" in args or "--help" in args:
-        print(USAGE.format(default=DEFAULT_FILE))
+        print(USAGE)
         return 0
 
     host, port = "127.0.0.1", 8000
@@ -41,8 +40,10 @@ def main(argv: list[str] | None = None) -> int:
         else:
             rest.append(item)
 
-    sheet = Path(rest[0] if rest else DEFAULT_FILE).expanduser().resolve()
-    if rest and not sheet.exists():
+    # With no file named, hand the app nothing and let it offer the sheets
+    # opened lately, exactly as it does in a terminal.
+    sheet = Path(rest[0]).expanduser().resolve() if rest else None
+    if sheet is not None and not sheet.exists():
         print(f"No sheet at {sheet}. It will be created empty; ctrl+c if that is wrong.")
 
     try:
@@ -51,13 +52,17 @@ def main(argv: list[str] | None = None) -> int:
         print("Serving needs textual-serve:  pip install 'gridly[web]'")
         return 1
 
-    # Each browser session runs this, so the path is fixed rather than left to
-    # whatever directory the server happens to be started from.
+    # Each browser session runs this. The path is resolved first, so a session
+    # opens the sheet meant rather than whatever sits beside the server's
+    # working directory.
+    command = f"{shlex.quote(sys.executable)} -m gridly"
+    if sheet is not None:
+        command += f" {shlex.quote(str(sheet))}"
     server = Server(
-        command=f"{shlex.quote(sys.executable)} -m gridly {shlex.quote(str(sheet))}",
+        command=command,
         host=host,
         port=port,
-        title=f"Gridly — {sheet.name}",
+        title=f"Gridly — {sheet.name}" if sheet else "Gridly",
     )
     try:
         server.serve()
@@ -65,7 +70,8 @@ def main(argv: list[str] | None = None) -> int:
         if error.errno != errno.EADDRINUSE:
             raise
         # A page of traceback to say a port is busy helps nobody.
-        print(f"Port {port} is already busy. Try:  gridly-web {sheet.name} --port {port + 1}")
+        named = f" {sheet.name}" if sheet else ""
+        print(f"Port {port} is already busy. Try:  gridly-web{named} --port {port + 1}")
         return 1
     except KeyboardInterrupt:
         pass

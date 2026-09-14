@@ -11,8 +11,12 @@ SQLite file — there is no save step and nothing to lose on a crash.
 
 ```sh
 pip install -e ".[web]"
-gridly-web demo.gridly          # http://127.0.0.1:8000
+gridly-web                      # http://127.0.0.1:8000
+gridly-web demo.gridly          # or open one straight away
 ```
+
+With no file named, a browser session offers the sheets opened lately, the
+same as running `gridly` with nothing after it.
 
 Gridly is a Textual app, and Textual streams a terminal to the page, so this is
 the same app rather than a second one — every key and every setting works as it
