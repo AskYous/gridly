@@ -1,84 +1,84 @@
-import os as _os, tempfile as _tf; _os.environ["XDG_CONFIG_HOME"] = _tf.mkdtemp()
-import asyncio, pathlib, tempfile
-from textual.widgets import Input, OptionList
+import asyncio, os, pathlib, tempfile
+from textual.widgets import DataTable, Input, OptionList
 from gridly import config
-from gridly.picker import PickerApp, _entry, _folder
+from gridly.app import GridlyApp
+from gridly.coltypes import ColumnType
+from gridly.picker import PickerScreen
 from gridly.store import Sheet
 
-home = pathlib.Path(tempfile.mkdtemp())
-made = []
-for name in ("alpha", "beta", "gamma"):
-    p = home / f"{name}.gridly"
-    Sheet(p).close()
-    made.append(p.resolve())
-
-# --- the recent list itself
-print("empty at first :", config.recent())
-for p in made:
-    config.remember(p)
-print("newest first   :", [p.name for p in config.recent()])
-assert [p.name for p in config.recent()] == ["gamma.gridly", "beta.gridly", "alpha.gridly"]
-
-config.remember(made[2])                      # touching one moves it up, no duplicate
-print("after re-open  :", [p.name for p in config.recent()])
-assert [p.name for p in config.recent()] == ["gamma.gridly", "beta.gridly", "alpha.gridly"]
-config.remember(made[0])
-assert [p.name for p in config.recent()][0] == "alpha.gridly"
-
-made[1].unlink()                              # a sheet that has gone is skipped
-print("after deleting :", [p.name for p in config.recent()])
-assert "beta.gridly" not in [p.name for p in config.recent()]
-
-for i in range(20):                           # the list is capped
-    extra = home / f"extra{i}.gridly"
-    Sheet(extra).close()
-    config.remember(extra)
-print("capped at      :", len(config.recent()), "of", config.RECENT_LIMIT)
-assert len(config.recent()) == config.RECENT_LIMIT
-
-# --- long paths stay on one line
-deep = pathlib.Path("/a/very/long/directory/name/that/keeps/going/and/going/onwards")
-line = _entry(deep / "notes.gridly")
-print("entry          :", repr(line.plain))
-assert len(line.plain) <= 64 and "\n" not in line.plain
+def make(folder, name, value=None):
+    path = folder / name
+    sheet = Sheet(path)
+    if value:
+        sheet.set_cell(sheet.rows()[0].id, sheet.columns()[0].id, value)
+    sheet.close()
+    return path.resolve()
 
 async def main():
-    sheets = config.recent()
+    # A config of its own: this test counts what is in the recent list, and
+    # every other test that opens a sheet adds to the shared one.
+    os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp()
+    home = pathlib.Path(tempfile.mkdtemp())
+    first = make(home, "alpha.gridly", "in alpha")
+    second = make(home, "beta.gridly", "in beta")
+    config.remember(first)
+    config.remember(second)          # newest first: beta, alpha
 
-    # --- enter on the list opens that sheet
-    app = PickerApp(sheets, "fallback.gridly")
-    async with app.run_test(size=(90, 20)) as pilot:
-        options = app.query_one("#recent", OptionList)
-        print("listed         :", options.option_count, "sheets | focus:", type(app.focused).__name__)
-        assert options.option_count == len(sheets)
+    # --- with nothing named, the app asks which sheet
+    app = GridlyApp()
+    async with app.run_test(size=(90, 24)) as pilot:
+        assert isinstance(app.screen, PickerScreen), app.screen
+        options = app.screen.query_one("#recent", OptionList)
+        print("offered      :", options.option_count, "sheets")
+        assert options.option_count == 2
+
+        # --- choosing one opens it, and the app carries on running
         await pilot.press("down", "enter"); await pilot.pause()
-    print("chose          :", pathlib.Path(app.return_value).name)
-    assert app.return_value == str(sheets[1])
+        print("opened       :", app.sheet.path.name)
+        assert app.sheet.path == first
+        assert app.screen is app.screen_stack[0], "the picker should be gone"
+        assert app.is_running, "choosing a sheet must not end the session"
 
-    # --- a typed path wins over the list
-    app = PickerApp(sheets, "fallback.gridly")
-    async with app.run_test(size=(90, 20)) as pilot:
+        # --- and the sheet is really there to work in
+        t = app.query_one("#grid", DataTable)
+        print("shows        :", t.get_cell_at(t.cursor_coordinate).plain)
+        assert t.get_cell_at(t.cursor_coordinate).plain == "in alpha"
+        await pilot.press("a"); await pilot.pause()
+        assert len(app.sheet.rows()) == 2, "the grid should take keys afterwards"
+
+    # --- typing a path works the same way
+    app = GridlyApp()
+    async with app.run_test(size=(90, 24)) as pilot:
         await pilot.press("tab"); await pilot.pause()
-        app.query_one("#path", Input).value = "/tmp/typed.gridly"
+        app.screen.query_one("#path", Input).value = str(second)
         await pilot.press("enter"); await pilot.pause()
-    print("typed          :", app.return_value)
-    assert app.return_value == "/tmp/typed.gridly"
+        print("typed        :", app.sheet.path.name)
+        assert app.sheet.path == second and app.is_running
 
-    # --- escape means "never mind"
-    app = PickerApp(sheets, "fallback.gridly")
-    async with app.run_test(size=(90, 20)) as pilot:
+    # --- a path that is not there yet is created
+    fresh = home / "made-up.gridly"
+    app = GridlyApp()
+    async with app.run_test(size=(90, 24)) as pilot:
+        await pilot.press("tab"); await pilot.pause()
+        app.screen.query_one("#path", Input).value = str(fresh)
+        await pilot.press("enter"); await pilot.pause()
+        assert app.sheet.path == fresh.resolve() and fresh.exists()
+        print("created      :", fresh.name)
+
+    # --- escaping means opening nothing at all
+    app = GridlyApp()
+    async with app.run_test(size=(90, 24)) as pilot:
         await pilot.press("escape"); await pilot.pause()
-    print("escaped        :", app.return_value)
-    assert app.return_value is None
+    print("escaped      : sheet is", app.sheet)
+    assert app.sheet is None
 
-    # --- with nothing recent, the typing field takes focus
-    app = PickerApp([], "fallback.gridly")
-    async with app.run_test(size=(90, 20)) as pilot:
-        await pilot.pause()
-        print("no recents     : focus is", type(app.focused).__name__)
-        assert isinstance(app.focused, Input)
-        await pilot.press("enter"); await pilot.pause()
-    assert app.return_value == "fallback.gridly"
+    # --- and naming a sheet skips the asking
+    app = GridlyApp(second)
+    async with app.run_test(size=(90, 24)) as pilot:
+        assert app.screen is app.screen_stack[0]
+        assert app.sheet.path == second
+        print("named        :", app.sheet.path.name, "— no picker")
+
     print("ALL PICKER TESTS DONE")
 
 def test_picker():

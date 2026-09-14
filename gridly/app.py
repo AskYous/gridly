@@ -33,7 +33,7 @@ from .screens import (
 )
 from .clipboard import format_block, parse_block, to_system_clipboard
 from .csvfile import write_csv
-from .picker import choose_sheet
+from .picker import PickerScreen
 from .store import Column, Row, Sheet
 from .appearance import (
     COLUMN_WIDTHS,
@@ -158,10 +158,12 @@ class GridlyApp(App[None]):
                 title, description, partial(self.run_action, action), discover
             )
 
-    def __init__(self, path: str | Path) -> None:
+    def __init__(self, path: str | Path | None = None) -> None:
         super().__init__()
-        self.sheet = Sheet(path)
-        self.sub_title = _short_path(self.sheet.path)
+        #: None until a sheet has been chosen, which the picker does on mount.
+        self.sheet: Sheet | None = None
+        if path is not None:
+            self._open(path)
         self._columns: list[Column] = []
         self._rows: list[Row] = []
         self.appearance = Appearance.load()
@@ -197,10 +199,14 @@ class GridlyApp(App[None]):
         theme = saved.get("theme")
         self.theme = theme if theme in self.available_themes else DEFAULT_THEME
         self._theme_loaded = True
-        config.remember(self.sheet.path)
         table = self.query_one("#grid", DataTable)
         table.show_row_labels = True
         table.focus()
+        if self.sheet is None:
+            self.push_screen(
+                PickerScreen(config.recent(), DEFAULT_FILE), self._chose
+            )
+            return
         self.reload()
         if self.appearance.column_width == "fit":
             # The table has no size until it has been laid out once.
@@ -211,6 +217,21 @@ class GridlyApp(App[None]):
         """A fitted table is sized against the viewport, so it follows it."""
         if self.appearance.column_width == "fit" and self._columns:
             self.reload()
+
+    def _open(self, path: str | Path) -> None:
+        """Take up a sheet, and remember that it was opened."""
+        self.sheet = Sheet(path)
+        self.sub_title = _short_path(self.sheet.path)
+        config.remember(self.sheet.path)
+
+    def _chose(self, path: str | None) -> None:
+        """What the picker came back with. Nothing means they changed their mind."""
+        if path is None:
+            self.exit()
+            return
+        self._open(path)
+        self.reload()
+        self.call_after_refresh(self.reload)  # fitting needs the table's width
 
     def watch_theme(self, theme: str) -> None:
         """Remember whatever theme was picked, wherever it was picked from."""
@@ -226,6 +247,8 @@ class GridlyApp(App[None]):
 
     def reload(self, cursor: Coordinate | None = None) -> None:
         """Redraw the whole grid from the database."""
+        if self.sheet is None:
+            return  # nothing chosen yet; the picker is up
         table = self.table
         previous = cursor or table.cursor_coordinate
         self._anchor = None
@@ -278,8 +301,8 @@ class GridlyApp(App[None]):
         return table.content_size.width or table.size.width, 2 * table.cell_padding
 
     def _update_status(self) -> None:
-        if self._cycle_timer is not None:
-            return  # a cycle is on show; it puts the status back when it ends
+        if self.sheet is None or self._cycle_timer is not None:
+            return  # nothing open, or a cycle is on show and puts this back
         columns, rows = self.sheet.counts()
         column = self.current_column()
         shape = f"{rows} {_plural(rows, 'row')} × {columns} {_plural(columns, 'column')}"
@@ -1013,7 +1036,8 @@ class GridlyApp(App[None]):
         self.push_screen(HelpScreen())
 
     def on_unmount(self) -> None:
-        self.sheet.close()
+        if self.sheet is not None:   # nothing was ever chosen
+            self.sheet.close()
 
 def _plural(count: int, word: str) -> str:
     if count == 1:
@@ -1037,14 +1061,14 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
+    # No file named and nothing opened before: there is nothing to choose
+    # between, so take the default rather than showing an empty list.
     if args:
         path: str | None = args[0]
     elif config.recent():
-        path = choose_sheet(DEFAULT_FILE)
-        if path is None:
-            return 0
+        path = None  # the app asks, as a screen of its own
     else:
-        path = DEFAULT_FILE  # nothing to choose between yet
+        path = DEFAULT_FILE
 
     GridlyApp(path).run()
     return 0

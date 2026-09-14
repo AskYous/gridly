@@ -1,4 +1,9 @@
-"""Choosing which sheet to open, when the command line did not say."""
+"""Choosing which sheet to open, when the command line did not say.
+
+A screen rather than an app of its own: two apps in one process means the
+first one finishing ends a browser session, which is not what choosing a
+sheet should do.
+"""
 
 from __future__ import annotations
 
@@ -7,9 +12,10 @@ from pathlib import Path
 
 from rich.text import Text
 from textual import on
-from textual.app import App, ComposeResult
+from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
+from textual.screen import ModalScreen
 from textual.widgets import Input, Label, OptionList, Static
 
 from . import config
@@ -57,16 +63,11 @@ def _entry(sheet: Path) -> Text:
     )
 
 
-class PickerApp(App[str | None]):
+class PickerScreen(ModalScreen[str | None]):
     """A list of the sheets you had open lately, plus somewhere to type a path."""
-
-    CSS_PATH = "app.tcss"
-    TITLE = "Gridly"
-    SUB_TITLE = "open a sheet"
 
     BINDINGS = [
         Binding("escape", "cancel", "Cancel", show=False),
-        Binding("ctrl+c", "cancel", "Cancel", show=False),
     ]
 
     def __init__(self, sheets: list[Path], suggestion: str) -> None:
@@ -77,9 +78,11 @@ class PickerApp(App[str | None]):
     def compose(self) -> ComposeResult:
         with Vertical(classes="picker"):
             yield Label("Recent sheets")
-            options = OptionList(id="recent")
-            yield options
-            yield Label("Or type a path — a new sheet if it isn't there yet", classes="field-label")
+            yield OptionList(id="recent")
+            yield Label(
+                "Or type a path — a new sheet if it isn't there yet",
+                classes="field-label",
+            )
             yield Input(value=self.suggestion, id="path")
             yield Static(
                 "[dim]enter open · tab switch · esc quit[/]", classes="dialog-help"
@@ -97,18 +100,13 @@ class PickerApp(App[str | None]):
 
     @on(OptionList.OptionSelected)
     def open_recent(self, event: OptionList.OptionSelected) -> None:
-        self.exit(str(self.sheets[event.option_index]))
+        self.dismiss(str(self.sheets[event.option_index]))
 
     @on(Input.Submitted)
     def open_typed(self) -> None:
         typed = self.query_one("#path", Input).value.strip()
         if typed:
-            self.exit(typed)
+            self.dismiss(typed)
 
     def action_cancel(self) -> None:
-        self.exit(None)
-
-
-def choose_sheet(suggestion: str) -> str | None:
-    """Ask which sheet to open. None means the user changed their mind."""
-    return PickerApp(config.recent(), suggestion).run(inline=False)
+        self.dismiss(None)
