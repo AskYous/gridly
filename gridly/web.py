@@ -8,6 +8,7 @@ localhost unless told otherwise.
 
 from __future__ import annotations
 
+import errno
 import shlex
 import sys
 from pathlib import Path
@@ -41,6 +42,8 @@ def main(argv: list[str] | None = None) -> int:
             rest.append(item)
 
     sheet = Path(rest[0] if rest else DEFAULT_FILE).expanduser().resolve()
+    if rest and not sheet.exists():
+        print(f"No sheet at {sheet}. It will be created empty; ctrl+c if that is wrong.")
 
     try:
         from textual_serve.server import Server
@@ -50,10 +53,20 @@ def main(argv: list[str] | None = None) -> int:
 
     # Each browser session runs this, so the path is fixed rather than left to
     # whatever directory the server happens to be started from.
-    Server(
+    server = Server(
         command=f"{shlex.quote(sys.executable)} -m gridly {shlex.quote(str(sheet))}",
         host=host,
         port=port,
         title=f"Gridly — {sheet.name}",
-    ).serve()
+    )
+    try:
+        server.serve()
+    except OSError as error:
+        if error.errno != errno.EADDRINUSE:
+            raise
+        # A page of traceback to say a port is busy helps nobody.
+        print(f"Port {port} is already busy. Try:  gridly-web {sheet.name} --port {port + 1}")
+        return 1
+    except KeyboardInterrupt:
+        pass
     return 0
