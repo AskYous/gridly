@@ -7,6 +7,21 @@
 A terminal spreadsheet with typed columns. Every change is written straight to a
 SQLite file — there is no save step and nothing to lose on a crash.
 
+## In a browser
+
+```sh
+pip install -e ".[web]"
+gridly-web demo.gridly          # http://127.0.0.1:8000
+```
+
+Gridly is a Textual app, and Textual streams a terminal to the page, so this is
+the same app rather than a second one — every key and every setting works as it
+does in a terminal.
+
+Each browser session starts a real Gridly process with this machine's file
+access, so it listens on `127.0.0.1` only. `--host` widens that, and is worth
+doing only on a network you trust.
+
 ## Tests
 
 ```sh
