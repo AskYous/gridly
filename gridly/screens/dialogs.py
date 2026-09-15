@@ -98,6 +98,9 @@ class HelpScreen(ModalScreen[None]):
             ("{ / }", "Move the row up / down (or alt+↑ / ↓)"),
             ("[ / ]", "Move the column left / right"),
         ]),
+        ("Sheets", [
+            ("o", "Open another sheet"),
+        ]),
         ("Finding things in the sheet", [
             ("/", "Search every cell as you type"),
             ("n / N", "Jump to the next / previous match"),

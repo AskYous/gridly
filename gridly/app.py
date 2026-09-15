@@ -74,6 +74,7 @@ class GridlyApp(App[None]):
 
     BINDINGS = [
         Binding("space", "edit_cell", "Edit"),
+        Binding("o", "open_sheet", "Open", show=False),
         Binding("f", "edit_row", "Form", show=False),
         Binding("shift+right", "extend(0, 1)", "Select", key_display="shift+→", show=False),
         Binding("shift+left", "extend(0, -1)", "Select left", show=False),
@@ -130,6 +131,7 @@ class GridlyApp(App[None]):
         ("move_column(1)", "Move column right", "Swap it with the column after it", True),
         ("copy_cell", "Copy cell or selection", "To the clipboard, tab separated", True),
         ("copy_row", "Copy row", "The whole record, tab separated", True),
+        ("open_sheet", "Open another sheet", "Leave this one and pick a different file", True),
         ("export", "Export to CSV", "Write the sheet out as a file", True),
         ("search", "Find", "Look for text anywhere in the sheet", True),
         ("next_match", "Next match", "Jump to the match after this one", True),
@@ -760,6 +762,24 @@ class GridlyApp(App[None]):
             self.notify(f"Nothing to copy — {what} is empty.", severity="warning")
 
     # ---------------------------------------------------------------- export
+
+    def action_open_sheet(self) -> None:
+        """Put the picker back up, to leave this sheet for another."""
+
+        def chose(path: str | None) -> None:
+            if path is None:
+                return  # changed their mind: stay where they were
+            wanted = Path(path).expanduser().resolve()
+            if self.sheet is not None and wanted == self.sheet.path:
+                return
+            if self.sheet is not None:
+                self.sheet.close()  # its undo history goes with it
+            self._open(path)
+            self.reload()
+            self.notify(f"Opened {self.sheet.path.name}.")
+
+        here = str(self.sheet.path) if self.sheet else DEFAULT_FILE
+        self.push_screen(PickerScreen(config.recent(), here), chose)
 
     def action_export(self) -> None:
         """Write the sheet out as a CSV, whichever way it happens to be drawn."""

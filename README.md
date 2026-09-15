@@ -91,6 +91,9 @@ gridly                   # offers the sheets you had open lately
 gridly ~/budget.gridly   # or open one straight away
 ```
 
+`o` brings that list back at any point, to leave the sheet you are in for
+another one without closing the app. `esc` there leaves you where you were.
+
 With no file named, Gridly lists the sheets you have opened before — newest
 first, with where they live and when they were last touched — so a sheet in
 some deep folder is two keystrokes away rather than a `cd`. Sheets that have
@@ -138,6 +141,7 @@ where it can't, telling you how many it dropped.
 | `x`         | delete the current column                     |
 | `{` / `}`   | move the current row up / down (or alt+↑/↓)   |
 | `[` / `]`   | move the current column left / right          |
+| `o`         | open another sheet                            |
 | `/`         | search every cell                             |
 | `n` / `N`   | next / previous match                         |
 | shift+arrows| select a block of cells                       |
