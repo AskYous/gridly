@@ -37,8 +37,9 @@ SETTINGS = [
     ),
     (
         "centred",
-        "Where values sit",
-        "Text and numbers are always read from the left, whichever you pick.",
+        "Where values sit by default",
+        "Only for columns left on Automatic — a column given an alignment of "
+        "its own keeps it. Text and numbers read from the left either way.",
         [
             ("down the middle of their column", True),
             ("against the left edge", False),

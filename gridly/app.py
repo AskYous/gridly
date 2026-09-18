@@ -33,6 +33,7 @@ from .screens import (
 )
 from .clipboard import format_block, parse_block, to_system_clipboard
 from .csvfile import write_csv
+from .formulas import Formula, read_sum, reads_of
 from .picker import PickerScreen
 from .store import Column, Row, Sheet
 from .appearance import (
@@ -182,6 +183,8 @@ class GridlyApp(App[None]):
         self._anchor: Coordinate | None = None
         self._selected: set[Coordinate] = set()
         self._extending = 0
+        #: How wide each column was drawn last time, to notice when that moves.
+        self._widths: list[int | None] = []
         # How many lines each row is given. Also only a way of looking at the
         # sheet, but a taller row has room to show more of a multi-line value.
 
@@ -261,20 +264,8 @@ class GridlyApp(App[None]):
         self._columns = self.sheet.columns()
         self._rows = self.sheet.rows()
 
-        drawn = {
-            column.id: [
-                self.appearance.cell(column, row.values.get(column.id))
-                for row in self._rows
-            ]
-            for column in self._columns
-        }
-        labels = [field_label(column) for column in self._columns]
-        widths = self.appearance.widths(
-            labels,
-            [drawn[column.id] for column in self._columns],
-            len(str(len(self._rows))),
-            *self._room(),
-        )
+        labels, drawn, widths = self._measure()
+        self._widths = widths
         for label, column, width in zip(labels, self._columns, widths):
             table.add_column(label, key=str(column.id), width=width)
         for number, row in enumerate(self._rows, start=1):
@@ -296,6 +287,36 @@ class GridlyApp(App[None]):
         if self._query:
             self._look_for(self._query)  # the rows may not be the same ones
         self._update_status()
+
+    def _measure(self) -> tuple[list[Text], dict[int, list[Text]], list[int | None]]:
+        """Draw every cell, and work out how wide that leaves each column."""
+        drawn = {
+            column.id: [
+                self.appearance.cell(column, row.values.get(column.id))
+                for row in self._rows
+            ]
+            for column in self._columns
+        }
+        labels = [
+            field_label(column, self.appearance.centred)
+            for column in self._columns
+        ]
+        widths = self.appearance.widths(
+            labels,
+            [drawn[column.id] for column in self._columns],
+            len(str(len(self._rows))),
+            *self._room(),
+        )
+        return labels, drawn, widths
+
+    def _widths_moved(self) -> bool:
+        """Do the columns now want to be drawn a different width than they are?
+
+        A capped column is only as wide as the widest thing in it, so a value
+        going in or coming out can change that — and nothing else notices.
+        """
+        _, _, widths = self._measure()
+        return widths != self._widths
 
     def _room(self) -> tuple[int, int]:
         """How much width there is to share out, and what each column costs."""
@@ -328,6 +349,9 @@ class GridlyApp(App[None]):
             )
         if column is not None:
             detail += f"  ·  {column.name}: {column.type.label}"
+            spec = column.computed
+            if spec is not None:
+                detail += f", {self._describes(spec)}"
         line = Text.from_markup(f"[dim]{self.sheet.path.name}  ·  {shape}{detail}[/]")
         if column is not None and column.type is ColumnType.SELECT:
             line.append(" (", "dim")
@@ -623,6 +647,8 @@ class GridlyApp(App[None]):
         if column is None or row is None:
             self.notify("Nothing to edit yet.", severity="warning")
             return
+        if self._refuse_computed(column):
+            return
         value = row.values.get(column.id)
 
         if column.type is ColumnType.BOOLEAN:
@@ -644,7 +670,43 @@ class GridlyApp(App[None]):
         column, row = self.current_column(), self.current_row()
         if column is None or row is None:
             return
+        if self._refuse_computed(column):
+            return
         self._write(row, column, None)
+
+    def _refuse_computed(self, column: Column) -> bool:
+        """Say why a worked-out column cannot be typed into. True if it cannot."""
+        spec = column.computed
+        if spec is None:
+            return False
+        self.notify(
+            f"{column.name} is worked out by {self._describes(spec)} — "
+            "change what it reads instead.",
+            severity="warning",
+        )
+        return True
+
+    def _describes(self, spec: Formula) -> str:
+        """What works a column out, read aloud: its sum, or the month of what."""
+        if spec.fn == "sum":
+            return spec.expr
+        source = self.sheet.column(spec.source) if self.sheet else None
+        return f"the month of {source.name}" if source is not None else "a month"
+
+    def _feeds(self, column: Column) -> bool:
+        """Does another column work itself out from this one?
+
+        If it does, a value going in here changes a cell nobody touched, which
+        only a redraw of the grid will show.
+        """
+        for other in self._columns:
+            spec = other.computed
+            if spec is None:
+                continue
+            tree = read_sum(spec.expr, self._columns) if spec.fn == "sum" else None
+            if column.id in reads_of(other, tree, self._columns):
+                return True
+        return False
 
     def _clash(self, row: Row, column: Column, value: Any) -> str | None:
         """Why this value cannot go in this cell, if it cannot."""
@@ -654,16 +716,19 @@ class GridlyApp(App[None]):
         return f"{column.name} has to be unique — row {holder} already has that"
 
     def _write(self, row: Row, column: Column, value: Any) -> None:
+        if self._refuse_computed(column):
+            return
         complaint = self._clash(row, column, value)
         if complaint:
             self.notify(complaint + ".", severity="error")
             return
         self.sheet.set_cell(row.id, column.id, value)
         row.values[column.id] = value
-        if self.appearance.wrapping:
+        if self.appearance.wrapping or self._feeds(column) or self._widths_moved():
             # The value may need a different number of lines than the row has,
-            # and only a redraw can change that. Nothing structural moved, so
-            # the selection is put back afterwards.
+            # or leave its column a different width, or be read by a column that
+            # works itself out — and only a redraw can change any of those.
+            # Nothing structural moved, so the selection is put back afterwards.
             anchor = self._anchor
             self.reload()
             if anchor is not None:
@@ -851,7 +916,7 @@ class GridlyApp(App[None]):
         self._apply_paste(plan, shape, new_rows, clipped)
 
     def _apply_paste(self, plan, shape: str, new_rows: int, clipped: int) -> None:
-        skipped = repeated = 0
+        skipped = repeated = worked_out = 0
         # Values this paste has already used, so a block that repeats itself is
         # caught as well as one that clashes with what is already there.
         laid: dict[int, set] = {}
@@ -860,6 +925,9 @@ class GridlyApp(App[None]):
                 self.sheet.add_row()
             rows = self.sheet.rows()
             for record_index, column, raw in plan:
+                if column.computed is not None:
+                    worked_out += 1
+                    continue
                 try:
                     value = parse(column.type, raw, column.options, column.format)
                 except ValidationError:
@@ -888,11 +956,20 @@ class GridlyApp(App[None]):
                 f"{repeated} {_plural(repeated, 'value')} would have repeated a "
                 "unique column"
             )
+        if worked_out:
+            parts.append(
+                f"{worked_out} {_plural(worked_out, 'value')} landed on a column "
+                "that works itself out"
+            )
         if clipped:
             parts.append(f"{clipped} {_plural(clipped, 'column')} ran off the end")
         self.notify(
             " · ".join(parts),
-            severity="warning" if skipped or clipped or repeated else "information",
+            severity=(
+                "warning"
+                if skipped or clipped or repeated or worked_out
+                else "information"
+            ),
         )
 
     # ------------------------------------------------------------------- rows
@@ -971,11 +1048,22 @@ class GridlyApp(App[None]):
                 spec.colors,
                 spec.unique,
                 spec.format,
+                spec.formula,
+                spec.align,
             )
             self.reload(Coordinate(record, len(self._columns)))
-            self.notify(f"Added column {spec.name!r} ({spec.type.label}).")
+            sum_ = self._worked_out(spec)
+            self.notify(
+                f"Added column {spec.name!r} ({spec.type.label})"
+                + (f", showing {sum_}." if sum_ else ".")
+            )
 
-        self.push_screen(ColumnScreen(), done)
+        self.push_screen(ColumnScreen(columns=self._columns), done)
+
+    def _worked_out(self, spec: ColumnSpec) -> str:
+        """What works a column out, read aloud — or nothing, if it is typed in."""
+        formula = Formula.decode(spec.formula)
+        return "" if formula is None else self._describes(formula)
 
     def action_edit_column(self) -> None:
         column = self.current_column()
@@ -1006,9 +1094,13 @@ class GridlyApp(App[None]):
                 spec.unique,
                 spec.renames,
                 spec.format,
+                spec.formula,
+                spec.align,
             )
             self.reload()
-            if dropped:
+            if sum_ := self._worked_out(spec):
+                self.notify(f"{spec.name} now shows {sum_}, and follows it.")
+            elif dropped:
                 self.notify(
                     f"Updated {spec.name!r}, but {dropped} "
                     f"{_plural(dropped, 'value')} no longer fit and "
@@ -1021,16 +1113,22 @@ class GridlyApp(App[None]):
             else:
                 self.notify(f"Updated column {spec.name!r}.")
 
-        self.push_screen(ColumnScreen(column), done)
+        self.push_screen(ColumnScreen(column, self._columns), done)
 
     def action_delete_column(self) -> None:
         column = self.current_column()
         if column is None:
             return
 
-        self.sheet.delete_column(column.id)
+        orphaned = self.sheet.delete_column(column.id)
         self.reload()
-        self.notify(f"Deleted column {column.name!r}. u to undo.")
+        note = f"Deleted column {column.name!r}."
+        if orphaned:
+            note += (
+                f" {', '.join(orphaned)} "
+                f"{'have' if len(orphaned) > 1 else 'has'} nothing to work out now."
+            )
+        self.notify(note + " u to undo.")
 
     def action_move_row(self, offset: int) -> None:
         """Swap the row under the cursor with the one above or below it."""

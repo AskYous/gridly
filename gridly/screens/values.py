@@ -20,6 +20,13 @@ CLEAR_OPTION = "— clear —"
 
 def build_editor(column: Column, value: Any, field_id: str):
     """The right widget for a column's type, pre-filled with `value`."""
+    if column.computed is not None:
+        # Shown, so the row reads whole, but there is nothing to type here.
+        return Input(
+            value=display(column.type, value, column.format),
+            disabled=True,
+            id=field_id,
+        )
     if column.type is ColumnType.BOOLEAN:
         return Select(
             [("Yes", "yes"), ("No", "no")],
@@ -175,9 +182,11 @@ class RowFormScreen(ModalScreen[dict[int, Any] | None]):
                 )
                 with VerticalScroll(classes="form-fields"):
                     for column in self.columns:
+                        about = column.type.label
+                        if column.computed is not None:
+                            about += " · worked out"
                         yield Label(
-                            f"{column.name}  [dim]{column.type.label}[/]",
-                            classes="field-label",
+                            f"{column.name}  [dim]{about}[/]", classes="field-label"
                         )
                         yield self._field(column)
                 yield Static("", id="error", classes="error")
@@ -199,6 +208,8 @@ class RowFormScreen(ModalScreen[dict[int, Any] | None]):
     def action_save(self) -> None:
         values: dict[int, Any] = {}
         for column in self.columns:
+            if column.computed is not None:
+                continue  # worked out, so there is nothing here to save
             field = self.query_one(f"#field-{column.id}")
             if isinstance(field, Select):
                 chosen = None if field.value is Select.NULL else field.value
@@ -215,6 +226,8 @@ class RowFormScreen(ModalScreen[dict[int, Any] | None]):
                 return self._refuse(field, f"{column.name}: {error}")
 
         for column in self.columns:
+            if column.id not in values:
+                continue
             complaint = self.clash(column, values[column.id])
             if complaint:
                 return self._refuse(self.query_one(f"#field-{column.id}"), complaint)
