@@ -101,6 +101,18 @@ since been deleted are dropped from the list. There is a field underneath for
 typing any other path, and `esc` quits without opening anything. The very first
 run has nothing to list, so it just opens `./sheet.gridly` as before.
 
+The list takes the keys straight away, so you can find a sheet by typing at it:
+`ovt` finds `overtime.gridly`, the same fuzzy matching the command palette does,
+with the letters it found picked out and the closest match first. It is the
+sheet's name that is matched, not the folder it sits in — folders are long
+enough that a letter or two would otherwise turn up in every one of them. `↑↓`
+move the highlight from the filter, `enter` opens what is highlighted, and `esc`
+clears the filter before it gives up on the screen.
+
+The name goes across the top in block capitals, in whatever theme is loaded. On
+a screen too small to carry it — under 50 columns or 28 rows — it stands down,
+since the list of sheets is what the screen is for.
+
 `gridly.sh` in this folder does the same thing without installing anything.
 
 ## Column types

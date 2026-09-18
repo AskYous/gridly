@@ -173,7 +173,8 @@ HelpScreen .dialog-fields {
     padding: 1 2;
 }
 
-PickerApp {
+/* The picker used to be an app of its own; centring it followed it here. */
+PickerScreen {
     align-horizontal: center;
 }
 
@@ -269,4 +270,36 @@ PickerApp {
 
 #search:focus {
     background: $primary 40%;
+}
+
+/* The name across the top of the picker, and what it says underneath. */
+.picker #banner {
+    width: 1fr;
+    height: auto;
+    text-align: center;
+    padding-top: 1;
+}
+
+.picker #tagline {
+    width: 1fr;
+    height: auto;
+    text-align: center;
+    color: $text-muted;
+    padding-bottom: 1;
+}
+
+/* The filter above the list of sheets: part of the list rather than a field
+   of its own, so the screen does not read as three boxes stacked up. */
+.picker #filter {
+    width: 1fr;
+    height: 1;
+    border: none;
+    padding: 0 1;
+    margin-bottom: 1;
+    background: $surface;
+    color: $text;
+}
+
+.picker #filter:focus {
+    background: $surface-lighten-1;
 }

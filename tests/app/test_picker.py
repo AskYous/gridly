@@ -1,4 +1,5 @@
 import asyncio, os, pathlib, tempfile
+from textual.containers import Vertical
 from textual.widgets import DataTable, Input, OptionList
 from gridly import config
 from gridly.app import GridlyApp
@@ -32,6 +33,12 @@ async def main():
         print("offered      :", options.option_count, "sheets")
         assert options.option_count == 2
 
+        # --- it sits in the middle, not shoved against the left edge
+        box = app.screen.query_one(".picker", Vertical).region
+        left, right = box.x, app.screen.size.width - box.right
+        print("gaps         :", left, "left,", right, "right")
+        assert left > 0 and abs(left - right) <= 1, (left, right)
+
         # --- choosing one opens it, and the app carries on running
         await pilot.press("down", "enter"); await pilot.pause()
         print("opened       :", app.sheet.path.name)
@@ -49,7 +56,9 @@ async def main():
     # --- typing a path works the same way
     app = GridlyApp()
     async with app.run_test(size=(90, 24)) as pilot:
-        await pilot.press("tab"); await pilot.pause()
+        # Focused outright rather than tabbed to: how many stops there are
+        # between here and there is the filter's business, not this test's.
+        app.screen.query_one("#path", Input).focus(); await pilot.pause()
         app.screen.query_one("#path", Input).value = str(second)
         await pilot.press("enter"); await pilot.pause()
         print("typed        :", app.sheet.path.name)
@@ -59,7 +68,9 @@ async def main():
     fresh = home / "made-up.gridly"
     app = GridlyApp()
     async with app.run_test(size=(90, 24)) as pilot:
-        await pilot.press("tab"); await pilot.pause()
+        # Focused outright rather than tabbed to: how many stops there are
+        # between here and there is the filter's business, not this test's.
+        app.screen.query_one("#path", Input).focus(); await pilot.pause()
         app.screen.query_one("#path", Input).value = str(fresh)
         await pilot.press("enter"); await pilot.pause()
         assert app.sheet.path == fresh.resolve() and fresh.exists()
