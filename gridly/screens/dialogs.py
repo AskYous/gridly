@@ -95,6 +95,7 @@ class HelpScreen(ModalScreen[None]):
             ("d", "Delete the row"),
             ("c / e / x", "Add / edit / delete a column"),
             ("", "a column can be marked unique in that form"),
+            ("", "or calculated from the others by a formula you write"),
             ("{ / }", "Move the row up / down (or alt+↑ / ↓)"),
             ("[ / ]", "Move the column left / right"),
         ]),

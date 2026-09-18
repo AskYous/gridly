@@ -5,11 +5,28 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from .coltypes import OPTION_COLORS, ColumnType, decode, display, encode, parse
+from . import arithmetic
+from .coltypes import (
+    OPTION_COLORS,
+    ColumnType,
+    ValidationError,
+    decode,
+    display,
+    encode,
+    parse,
+)
+from .formulas import (
+    Formula,
+    read_sum,
+    reading_order,
+    reads_of,
+    sum_text,
+    value_of,
+)
 
 SCHEMA_VERSION = "1"
 
@@ -29,6 +46,8 @@ CREATE TABLE IF NOT EXISTS columns (
     colors   TEXT NOT NULL DEFAULT '{}',
     unique_  INTEGER NOT NULL DEFAULT 0,
     format   TEXT NOT NULL DEFAULT '',
+    formula  TEXT NOT NULL DEFAULT '',
+    align    TEXT NOT NULL DEFAULT '',
     position INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS rows (
@@ -56,7 +75,17 @@ class Column:
     #: How the type writes itself, where it has a choice — see the type's own
     #: formats, such as TIME_FORMATS.
     format: str = ""
+    #: An encoded Formula, for a column that is worked out rather than typed in.
+    formula: str = ""
+    #: Where the values sit across the column — left, center or right. Empty
+    #: leaves it to the type, which is what every column did before this.
+    align: str = ""
     position: int = 0
+
+    @property
+    def computed(self) -> Formula | None:
+        """What works this column out, or nothing if it is typed in."""
+        return Formula.decode(self.formula)
 
     def color(self, option: str | None) -> str | None:
         """The colour a dropdown option is shown in.
@@ -125,6 +154,16 @@ class Sheet:
         if "format" not in present:
             self.db.execute(
                 "ALTER TABLE columns ADD COLUMN format TEXT NOT NULL DEFAULT ''"
+            )
+            self.db.commit()
+        if "formula" not in present:
+            self.db.execute(
+                "ALTER TABLE columns ADD COLUMN formula TEXT NOT NULL DEFAULT ''"
+            )
+            self.db.commit()
+        if "align" not in present:
+            self.db.execute(
+                "ALTER TABLE columns ADD COLUMN align TEXT NOT NULL DEFAULT ''"
             )
             self.db.commit()
 
@@ -211,7 +250,8 @@ class Sheet:
 
     def columns(self) -> list[Column]:
         rows = self.db.execute(
-            "SELECT id, name, type, options, colors, unique_, format, position "
+            "SELECT id, name, type, options, colors, unique_, format, formula, "
+            "align, position "
             "FROM columns "
             "ORDER BY position, id"
         ).fetchall()
@@ -224,6 +264,8 @@ class Sheet:
                 colors=json.loads(r["colors"] or "{}"),
                 unique=bool(r["unique_"]),
                 format=r["format"],
+                formula=r["formula"],
+                align=r["align"],
                 position=r["position"],
             )
             for r in rows
@@ -236,7 +278,8 @@ class Sheet:
         return None
 
     def rows(self) -> list[Row]:
-        by_type = {c.id: c.type for c in self.columns()}
+        columns = self.columns()
+        by_type = {c.id: c.type for c in columns}
         result = [
             Row(id=r["id"], position=r["position"])
             for r in self.db.execute(
@@ -249,7 +292,50 @@ class Sheet:
             coltype = by_type.get(cell["column_id"])
             if row is not None and coltype is not None:
                 row.values[cell["column_id"]] = decode(coltype, cell["value"])
+        self._work_out(columns, result)
         return result
+
+    def _work_out(self, columns: list[Column], rows: list[Row]) -> None:
+        """Fill in every computed column, from the columns they read.
+
+        Done here, on the way out, rather than written into cells — so a month
+        can never be left standing next to a date that has since moved. A source
+        that has gone, or is no longer a date, leaves the column empty rather
+        than complaining, and so does a value the column's own type refuses.
+
+        Columns are worked out in the order they read each other, so a sum over
+        a column that is itself a sum sees the answer rather than the blank it
+        started as.
+        """
+        found = {column.id: column for column in columns}
+        sums = {
+            column.id: read_sum(column.computed.expr, columns)
+            for column in columns
+            if column.computed is not None and column.computed.fn == "sum"
+        }
+        # Every computed column starts empty, so one that never comes up — a
+        # ring of them, or a sum that will not read — shows nothing at all.
+        for column in columns:
+            if column.computed is not None:
+                for row in rows:
+                    row.values[column.id] = None
+
+        for column in reading_order(columns, sums):
+            spec = column.computed
+            source = found.get(spec.source)
+            for row in rows:
+                if spec.fn == "sum":
+                    raw = sum_text(sums[column.id], columns, row.values)
+                elif source is None:
+                    raw = ""
+                else:
+                    raw = value_of(spec, source.type, row.values.get(source.id))
+                try:
+                    row.values[column.id] = parse(
+                        column.type, raw, column.options, column.format
+                    )
+                except ValidationError:
+                    row.values[column.id] = None
 
     def counts(self) -> tuple[int, int]:
         cols = self.db.execute("SELECT COUNT(*) AS n FROM columns").fetchone()["n"]
@@ -266,6 +352,8 @@ class Sheet:
         colors: dict[str, str] | None = None,
         unique: bool = False,
         fmt: str = "",
+        formula: str = "",
+        align: str = "",
     ) -> Column:
         self._checkpoint(f"add column {name!r}")
         position = self.db.execute(
@@ -273,8 +361,9 @@ class Sheet:
         ).fetchone()["p"]
         cursor = self.db.execute(
             "INSERT INTO columns "
-            "(name, type, options, colors, unique_, format, position) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "(name, type, options, colors, unique_, format, formula, align, "
+            "position) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 name,
                 coltype.value,
@@ -282,13 +371,15 @@ class Sheet:
                 json.dumps(colors or {}),
                 int(unique),
                 fmt,
+                formula,
+                align,
                 position,
             ),
         )
         self.db.commit()
         return Column(
             cursor.lastrowid, name, coltype, options or [], colors or {},
-            unique, fmt, position,
+            unique, fmt, formula, align, position,
         )
 
     def update_column(
@@ -301,6 +392,8 @@ class Sheet:
         unique: bool = False,
         renames: dict[str, str] | None = None,
         fmt: str = "",
+        formula: str = "",
+        align: str = "",
     ) -> int:
         """Rename / retype a column. Returns how many cells were dropped in the process."""
         old = self.column(column_id)
@@ -309,6 +402,8 @@ class Sheet:
         self._checkpoint(f"edit column {old.name!r}")
         options = options or []
         dropped = 0
+        if name != old.name:
+            self._follow_rename(old.name, name, column_id)
 
         # An option that was renamed takes its values with it. Without this,
         # every cell holding the old wording fails to match the new options and
@@ -323,7 +418,12 @@ class Sheet:
                         (renames[cell["value"]], cell["row_id"], column_id),
                     )
 
-        if old.type is not coltype or (
+        if formula:
+            # A computed column keeps no cells: whatever was typed in here
+            # before is gone rather than converted, since nothing would ever
+            # show it again. Undo still has it.
+            self.db.execute("DELETE FROM cells WHERE column_id = ?", (column_id,))
+        elif old.type is not coltype or (
             coltype is ColumnType.SELECT and options != old.options
         ):
             cells = self.db.execute(
@@ -348,7 +448,7 @@ class Sheet:
 
         self.db.execute(
             "UPDATE columns SET name = ?, type = ?, options = ?, colors = ?, "
-            "unique_ = ?, format = ? WHERE id = ?",
+            "unique_ = ?, format = ?, formula = ?, align = ? WHERE id = ?",
             (
                 name,
                 coltype.value,
@@ -356,19 +456,60 @@ class Sheet:
                 json.dumps(colors or {}),
                 int(unique),
                 fmt,
+                formula,
+                align,
                 column_id,
             ),
         )
         self.db.commit()
         return dropped
 
-    def delete_column(self, column_id: int) -> None:
+    def _follow_rename(self, was: str, now: str, renamed: int) -> None:
+        """Point every sum that reads a column at its new name.
+
+        A sum names the columns it reads, so a rename would otherwise leave it
+        naming something that is not there any more — for a change that was only
+        ever about the wording.
+        """
+        columns = self.columns()
+        names = [column.name for column in columns]
+        for column in columns:
+            spec = column.computed
+            if column.id == renamed or spec is None or spec.fn != "sum":
+                continue
+            rewritten = arithmetic.rename(spec.expr, names, was, now)
+            if rewritten != spec.expr:
+                self.db.execute(
+                    "UPDATE columns SET formula = ? WHERE id = ?",
+                    (replace(spec, expr=rewritten).encode(), column.id),
+                )
+
+    def delete_column(self, column_id: int) -> list[str]:
+        """Remove a column. Returns the computed columns it was feeding.
+
+        Those are left standing as ordinary empty columns rather than quietly
+        working nothing out, so what they lost is something you can see.
+        """
         gone = self.column(column_id)
         self._checkpoint(f"delete column {gone.name!r}" if gone else "delete column")
+        columns = self.columns()
+        orphaned = [
+            column
+            for column in columns
+            if column.computed is not None
+            and column.id != column_id
+            and column_id
+            in reads_of(column, read_sum(column.computed.expr, columns), columns)
+        ]
+        for column in orphaned:
+            self.db.execute(
+                "UPDATE columns SET formula = '' WHERE id = ?", (column.id,)
+            )
         self.db.execute("DELETE FROM cells WHERE column_id = ?", (column_id,))
         self.db.execute("DELETE FROM columns WHERE id = ?", (column_id,))
         self.db.commit()
         self._renumber("columns")
+        return [column.name for column in orphaned]
 
     def move_column(self, column_id: int, offset: int) -> bool:
         self._checkpoint("move column")
@@ -479,10 +620,14 @@ class Sheet:
         self._renumber("rows")
 
     def set_cell(self, row_id: int, column_id: int, value: Any) -> None:
-        self._checkpoint("edit cell")
+        # Both refusals come before the checkpoint: a change that never
+        # happened is not one to be able to take back.
         col = self.column(column_id)
         if col is None:
             raise KeyError(column_id)
+        if col.computed is not None:
+            raise ValueError(f"{col.name} is worked out, not typed in")
+        self._checkpoint("edit cell")
         self.db.execute(
             "INSERT INTO cells (row_id, column_id, value) VALUES (?, ?, ?) "
             "ON CONFLICT(row_id, column_id) DO UPDATE SET value = excluded.value",

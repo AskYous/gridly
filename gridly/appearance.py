@@ -185,8 +185,15 @@ def _next(options: tuple[str, ...], current: str) -> str:
     return options[(options.index(current) + 1) % len(options)]
 
 
-def field_label(column: Column) -> Text:
-    return Text.assemble((column.name, "bold"), (f"  {column.type.tag}", "dim"))
+def field_label(column: Column, middle: bool = DEFAULT_CENTRED) -> Text:
+    # A worked-out column says so beside its type, since nothing else in the
+    # grid distinguishes a value nobody typed from one somebody did.
+    tag = column.type.tag + (" fx" if column.computed is not None else "")
+    label = Text.assemble((column.name, "bold"), (f"  {tag}", "dim"))
+    # A heading against the left of a column of right-aligned figures reads as
+    # a different column, so it goes wherever the values go.
+    label.justify = sits(column, middle)
+    return label
 
 
 def fair_cap(naturals: list[int], budget: int, minimum: int) -> int:
@@ -255,12 +262,33 @@ def centred(cell: Text, height: int, lines: int | None = None) -> Text:
 #: they read better down the middle of the column than against its left edge.
 CENTRED = (ColumnType.BOOLEAN, ColumnType.DATE, ColumnType.TIME, ColumnType.SELECT)
 
+#: Where a column's values may be told to sit, and what the form calls each.
+#: The empty one leaves it to the type, which is what every column did before
+#: a column could be told; the rest are Rich's own names for the same thing.
+ALIGNMENTS = {
+    "": "Automatic",
+    "left": "Left",
+    "center": "Centred",
+    "right": "Right",
+}
+
+
+def sits(column: Column, middle: bool = DEFAULT_CENTRED) -> str | None:
+    """Where this column's values sit across it.
+
+    A column that has been told wins outright. One that has not falls back to
+    what its type suits, which is the sheet-wide setting's business.
+    """
+    if column.align in ("left", "center", "right"):
+        return column.align
+    return "center" if middle and column.type in CENTRED else None
+
 
 def render(
     column: Column, value: Any, lines: int, middle: bool = DEFAULT_CENTRED
 ) -> Text:
     """How a value looks inside the grid."""
-    across = "center" if middle and column.type in CENTRED else None
+    across = sits(column, middle)
     if value is None:
         return Text("·", "dim", justify=across)
     if column.type is ColumnType.BOOLEAN:
@@ -270,11 +298,13 @@ def render(
             else Text("✗", "red dim", justify=across)
         )
     if column.type is ColumnType.NUMBER:
-        return Text(display(column.type, value), "cyan")
+        return Text(display(column.type, value), "cyan", justify=across)
     if column.type in (ColumnType.DATE, ColumnType.TIME):
         return Text(display(column.type, value, column.format), "magenta", justify=across)
     if column.type is ColumnType.SELECT:
         return Text(
             display(column.type, value), color_style(column.color(value)), justify=across
         )
-    return fit(display(column.type, value), lines)
+    drawn = fit(display(column.type, value), lines)
+    drawn.justify = across
+    return drawn

@@ -118,6 +118,10 @@ Bad input is refused with a message instead of being stored. Changing a
 column's type converts the existing values where it can and clears the cells
 where it can't, telling you how many it dropped.
 
+A column can also be calculated from the others rather than typed into — a
+formula such as `Hours * 55`, or the month of a date. See *Columns that work
+themselves out* below.
+
 ## Keys
 
 | Key         | Does                                          |
@@ -137,7 +141,7 @@ where it can't, telling you how many it dropped.
 | `u` / `U`   | undo / redo the last change                   |
 | `d`         | delete the current row                        |
 | `c`         | add a column                                  |
-| `e`         | edit the current column (name, type, options) |
+| `e`         | edit the current column (name, type, options, formula, alignment) |
 | `x`         | delete the current column                     |
 | `{` / `}`   | move the current row up / down (or alt+↑/↓)   |
 | `[` / `]`   | move the current column left / right          |
@@ -242,15 +246,81 @@ Colours show in the grid, in the picker you get when editing a cell, and in the
 status line. Sheets made before colours existed pick them up from the palette
 without being rewritten.
 
+## Columns that work themselves out
+
+A column can take its values from another column instead of from you. In the
+column form (`c` or `e`), *Value* offers two of those beside the usual *Typed
+in*: **Calculated**, by a formula you write, and **Month of a date**.
+
+Nothing is stored. A worked-out column is worked out every time the sheet is
+read, so it can never be left standing beside a value that has since moved —
+change what it reads and it changes with it, undo that and it goes back too. Its
+header carries an `fx` beside the type, and the status line says what works it
+out.
+
+That also means there is nothing in it to type into: `enter` and `backspace` say
+which column to change instead, the row form shows it greyed out, and a paste
+that lands on it is counted and dropped rather than written.
+
+### Calculated
+
+Write the formula in the names of the other columns: `Hours * 55`, `Hours * 55 + Bonus`,
+`(Hours - 8) * 1.5 * Rate`. Numbers, `+ - * /` and brackets, and nothing else —
+it is read a piece at a time rather than handed to Python, so a formula in a
+sheet can only ever do arithmetic. A formula reads number columns, including ones
+that are themselves calculated, so `Pay = Hours * 55` and `Tax = Pay * 0.15` both
+land; each column is worked out after the ones it reads, whatever order they sit
+in. A formula that would end up reading itself round a circle is refused in the
+form. Under the box, the form lists the columns of this sheet you can use.
+
+A row nobody has filled in yet stays empty rather than reading as zero — which
+is what stops a rate column paying out on every blank row. In a row that has
+been started, a column still blank counts as nothing. Dividing by nothing leaves
+the cell empty too.
+
+Rename a column and the formulas that read it follow the new name. Delete it
+and they stop, and say so.
+
+### Month of a date
+
+Pick the date column to read and how the month should be written.
+
+| Written as | Looks like  |
+| ---------- | ----------- |
+| name       | `September` |
+| short      | `Sep`       |
+| number     | `9`         |
+| year       | `2026-09`   |
+
+### What a worked-out column may be
+
+The column still has a type, and the answer has to fit it. A formula goes in a
+number column, or a text one. A month has more to say: text takes any of the
+four wordings. A number column takes the month only as a number. A dropdown
+lists the twelve months itself — you do not type its options, and it will not
+take `2026-09`, which never stops adding new ones. Anything else — a date, a
+time, a yes/no — is refused in the form, with the reason.
+
+Delete a column that something else is worked out from, and that column stops
+working anything out and says so, rather than quietly emptying. Turn *Value*
+back to *Typed in* and it becomes an ordinary empty column you own again.
+
 ## Where values sit in a column
 
-Booleans, dates, times and dropdowns go down the middle of their column by
-default: they are all of a size and usually shorter than the heading above them,
-so against the left edge they read as stranded. Text and numbers stay left,
-where prose and figures are read from.
+Each column has an *Alignment* in its own form (`c` or `e`): **Left**,
+**Centred**, **Right**, or **Automatic**, which is what it starts on. The
+heading goes wherever the values go, so a column of right-aligned figures does
+not read as two columns.
 
-If you would rather everything sat left, *Where values sit* in the settings
-page (`,`) says so. Text and numbers never move either way.
+Right is the one worth reaching for: a column of money or hours lines its digits
+up against each other, which is how figures are meant to be read.
+
+On Automatic, booleans, dates, times and dropdowns go down the middle of their
+column: they are all of a size and usually shorter than the heading above them,
+so against the left edge they read as stranded. Text and numbers stay left,
+where prose and figures are read from. *Where values sit by default* in the
+settings page (`,`) turns that centring off across the sheet — for the columns
+still on Automatic. A column given an alignment of its own keeps it either way.
 
 ## Multi-line text
 
@@ -404,6 +474,7 @@ field focused.
 
 ## File format
 
-One SQLite database per sheet: `columns` (name, type, options, position),
-`rows` (position), and `cells` (row_id, column_id, value). Open it with any
-SQLite tool.
+One SQLite database per sheet: `columns` (name, type, options, formula, align,
+position), `rows` (position), and `cells` (row_id, column_id, value). Open it
+with any SQLite tool. A column that works itself out keeps what works it out in
+`formula` and holds no cells at all.
