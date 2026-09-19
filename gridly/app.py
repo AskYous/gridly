@@ -8,6 +8,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
+from rich.cells import cell_len
 from rich.text import Text
 from textual import events, on
 from textual.app import App, ComposeResult, SystemCommand
@@ -154,11 +155,42 @@ class GridlyApp(App[None]):
     # Textual's own system commands already cover these two.
     PALETTE_ELSEWHERE = {"change_theme", "quit"}
 
+    def keys_by_action(self) -> dict[str, str]:
+        """The key that runs each action, written the way the footer writes it.
+
+        Where a binding lists several keys, the first is the one taken: it is
+        the one the footer and the help screen show, so it is the one to learn.
+        """
+        found: dict[str, str] = {}
+        for binding in self.BINDINGS:
+            first = replace(binding, key=binding.key.split(",")[0])
+            found.setdefault(binding.action, self.get_key_display(first))
+        return found
+
     def get_system_commands(self, screen: Screen):
         yield from super().get_system_commands(screen)
+        # Each command says which key does the same thing, so the palette
+        # teaches its own way out — next time the key is enough. The key leads
+        # the line and is padded to a common width, so they line up down the
+        # list and can be read off it rather than hunted for at the end of
+        # descriptions that are all different lengths.
+        keys = self.keys_by_action()
+        room = max((cell_len(key) for key in keys.values()), default=0)
         for action, title, description, discover in self.PALETTE:
+            key = keys.get(action)
+            if key is None:
+                lead = " " * room  # a palette-only command keeps the column
+            else:
+                # `[` is a key of its own here, and would open a markup tag.
+                # Built outside the f-string: a backslash inside one is a
+                # syntax error before 3.12, and the tests run on 3.10.
+                safe = key.replace("[", "\\[")
+                lead = f"[b]{safe}[/]" + " " * (room - cell_len(key))
             yield SystemCommand(
-                title, description, partial(self.run_action, action), discover
+                title,
+                f"{lead}   {description}",
+                partial(self.run_action, action),
+                discover,
             )
 
     def __init__(self, path: str | Path | None = None) -> None:

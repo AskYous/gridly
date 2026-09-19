@@ -1,6 +1,7 @@
 import os as _os, tempfile as _tf; _os.environ["XDG_CONFIG_HOME"] = _tf.mkdtemp()  # keep the real config out of it
 import asyncio, pathlib, tempfile
 from textual.command import CommandPalette
+from textual.content import Content
 from textual.coordinate import Coordinate
 from textual.widgets import DataTable
 from gridly.app import GridlyApp
@@ -54,6 +55,55 @@ async def main():
         commands = list(app.get_system_commands(app.screen))
         titles = [c.title for c in commands]
         print("sample titles    :", [x for x in titles if "column" in x.lower()])
+
+        # --- every command says which key does the same thing, so the palette
+        #     teaches its own way out
+        ours = {title: c.help for title, c in zip(titles, commands)}
+        keys = app.keys_by_action()
+        checked = 0
+        for action, title, description, _ in app.PALETTE:
+            line = ours[title]
+            assert description in line, (title, line)
+            key = keys.get(action)
+            if key is None:
+                continue  # a palette-only command has no key to show
+            # Checked on what is rendered, not the markup: the `[` key has to
+            # be escaped there, so the markup does not read back literally.
+            shown = Content.from_markup(line).plain
+            assert shown.startswith(key), (title, key, shown)
+            checked += 1
+        print("keys shown       :", checked, "of", len(app.PALETTE), "commands")
+        assert checked >= len(app.PALETTE) - 1, "only Toggle centring lacks a key"
+
+        # --- and the keys line up, so they read as a column rather than being
+        #     hunted for at the end of descriptions of every different length
+        # Measured on the rendered text, which is what the palette shows —
+        # the markup around the key is not on screen and must not be counted.
+        starts = {
+            Content.from_markup(ours[title]).plain.index(description)
+            for _, title, description, _ in app.PALETTE
+        }
+        print("descriptions all start at:", starts)
+        assert len(starts) == 1, starts
+
+        # --- the key is written the way the footer writes it, not the way the
+        #     binding spells it
+        shown = lambda title: Content.from_markup(ours[title]).plain
+        assert shown("Select one cell right").startswith("shift+→")
+        assert shown("Settings").startswith(",")
+        assert shown("Find").startswith("/")
+        # A binding listing several keys shows the first, as the footer does.
+        assert shown("Move row up").startswith("{")
+        # And a bracket key survives being put through markup.
+        assert shown("Move column left").startswith("["), shown("Move column left")
+        assert shown("Move column right").startswith("]")
+        print("written as       :", repr(shown("Select one cell right")))
+        print("bracket key      :", repr(shown("Move column left")))
+
+        # --- a description with a bracket in it would be read as markup and
+        #     swallowed, so none may have one
+        loose = [t for _, t, d, _ in app.PALETTE if "[" in d or "]" in d]
+        assert not loose, loose
 
         # --- reordering from the palette, which is what prompted this
         print("before           :", names())

@@ -168,9 +168,28 @@ themselves out* below.
 | `cmd/ctrl+v`| paste cells copied from a spreadsheet         |
 | `,`         | settings: width, wrapping, padding, placing, theme |
 | `t`         | change the colour theme                       |
-| `ctrl+p`    | command palette — every command, searchable   |
+| `ctrl+p`    | command palette — every command, with its key |
 | `?`         | help                                          |
 | `q`         | quit                                          |
+
+## The command palette
+
+`ctrl+p` lists everything the app can do, searchable by name — and each command
+shows the key that does the same thing, in a column down the left:
+
+```
+Add row
+a         Append an empty row at the bottom
+Duplicate row
+D         Copy this row into a new one below it
+Select one cell right
+shift+→   Grow the selection
+```
+
+So the palette is a way of finding a command once, rather than the way of
+running it every time. The keys come from the bindings themselves, written the
+way the footer writes them, so the two cannot drift apart — and a command with
+no key of its own keeps the column and simply shows nothing there.
 
 ## Themes
 
