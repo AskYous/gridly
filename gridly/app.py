@@ -170,10 +170,10 @@ class GridlyApp(App[None]):
     def get_system_commands(self, screen: Screen):
         yield from super().get_system_commands(screen)
         # Each command says which key does the same thing, so the palette
-        # teaches its own way out — next time the key is enough. The key leads
-        # the line and is padded to a common width, so they line up down the
-        # list and can be read off it rather than hunted for at the end of
-        # descriptions that are all different lengths.
+        # teaches its own way out — next time the key is enough. The keys are
+        # set against the right of a column of their own and the descriptions
+        # against the left of theirs, so both edges run straight down the list
+        # and the key always sits the same distance from what it does.
         keys = self.keys_by_action()
         room = max((cell_len(key) for key in keys.values()), default=0)
         for action, title, description, discover in self.PALETTE:
@@ -185,7 +185,7 @@ class GridlyApp(App[None]):
                 # Built outside the f-string: a backslash inside one is a
                 # syntax error before 3.12, and the tests run on 3.10.
                 safe = key.replace("[", "\\[")
-                lead = f"[b]{safe}[/]" + " " * (room - cell_len(key))
+                lead = " " * (room - cell_len(key)) + f"[b]{safe}[/]"
             yield SystemCommand(
                 title,
                 f"{lead}   {description}",

@@ -175,13 +175,16 @@ themselves out* below.
 ## The command palette
 
 `ctrl+p` lists everything the app can do, searchable by name — and each command
-shows the key that does the same thing, in a column down the left:
+shows the key that does the same thing. The keys sit against the right of a
+column of their own and the descriptions against the left of theirs, so both
+edges run straight down the list and every key is the same distance from what
+it does:
 
 ```
 Add row
-a         Append an empty row at the bottom
+      a   Append an empty row at the bottom
 Duplicate row
-D         Copy this row into a new one below it
+      D   Copy this row into a new one below it
 Select one cell right
 shift+→   Grow the selection
 ```

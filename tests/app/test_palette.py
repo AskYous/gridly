@@ -70,35 +70,49 @@ async def main():
             # Checked on what is rendered, not the markup: the `[` key has to
             # be escaped there, so the markup does not read back literally.
             shown = Content.from_markup(line).plain
-            assert shown.startswith(key), (title, key, shown)
+            assert key in shown, (title, key, shown)
             checked += 1
         print("keys shown       :", checked, "of", len(app.PALETTE), "commands")
         assert checked >= len(app.PALETTE) - 1, "only Toggle centring lacks a key"
 
-        # --- and the keys line up, so they read as a column rather than being
-        #     hunted for at the end of descriptions of every different length
-        # Measured on the rendered text, which is what the palette shows —
-        # the markup around the key is not on screen and must not be counted.
-        starts = {
-            Content.from_markup(ours[title]).plain.index(description)
-            for _, title, description, _ in app.PALETTE
-        }
+        # --- the keys sit against the right of their column and the
+        #     descriptions against the left of theirs, so both edges run
+        #     straight down the list. Measured on the rendered text, which is
+        #     what the palette shows — the markup around the key is not on
+        #     screen and must not be counted.
+        gutter, ends, starts = "   ", set(), set()
+        for action, title, description, _ in app.PALETTE:
+            shown = Content.from_markup(ours[title]).plain
+            starts.add(shown.index(description))
+            key = keys.get(action)
+            if key is not None:
+                # Right aligned: the key finishes hard against the gutter, so
+                # what sits before the description is the key and nothing else.
+                assert shown.endswith(gutter + description), (title, shown)
+                head = shown[: -len(gutter + description)]
+                assert head.endswith(key), (title, key, head)
+                assert head.lstrip() == key, ("padding is on the left", head)
+                ends.add(len(head))
         print("descriptions all start at:", starts)
+        print("keys all finish at       :", ends)
         assert len(starts) == 1, starts
+        assert len(ends) == 1, ends
 
         # --- the key is written the way the footer writes it, not the way the
         #     binding spells it
-        shown = lambda title: Content.from_markup(ours[title]).plain
-        assert shown("Select one cell right").startswith("shift+→")
-        assert shown("Settings").startswith(",")
-        assert shown("Find").startswith("/")
+        # The padding sits to the left of the key, so the key is what the line
+        # starts with once that is taken off.
+        wrote = lambda title: Content.from_markup(ours[title]).plain.lstrip()
+        assert wrote("Select one cell right").startswith("shift+→")
+        assert wrote("Settings").startswith(",")
+        assert wrote("Find").startswith("/")
         # A binding listing several keys shows the first, as the footer does.
-        assert shown("Move row up").startswith("{")
+        assert wrote("Move row up").startswith("{")
         # And a bracket key survives being put through markup.
-        assert shown("Move column left").startswith("["), shown("Move column left")
-        assert shown("Move column right").startswith("]")
-        print("written as       :", repr(shown("Select one cell right")))
-        print("bracket key      :", repr(shown("Move column left")))
+        assert wrote("Move column left").startswith("["), wrote("Move column left")
+        assert wrote("Move column right").startswith("]")
+        print("written as       :", repr(ours["Select one cell right"]))
+        print("bracket key      :", repr(wrote("Move column left")))
 
         # --- a description with a bracket in it would be read as markup and
         #     swallowed, so none may have one
