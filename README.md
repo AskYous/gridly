@@ -175,19 +175,19 @@ themselves out* below.
 ## The command palette
 
 `ctrl+p` lists everything the app can do, searchable by name — and each command
-shows the key that does the same thing. The keys sit against the right of a
-column of their own and the descriptions against the left of theirs, so both
-edges run straight down the list and every key is the same distance from what
-it does:
+shows the key that does the same thing, out against the right of the row the way
+a menu sets out its shortcuts:
 
 ```
 Add row
-      a   Append an empty row at the bottom
+Append an empty row at the bottom                                    a
 Duplicate row
-      D   Copy this row into a new one below it
+Copy this row into a new one below it                                D
 Select one cell right
-shift+→   Grow the selection
+Grow the selection                                             shift+→
 ```
+
+The right edge follows the window, so the keys stay against it at any size.
 
 So the palette is a way of finding a command once, rather than the way of
 running it every time. The keys come from the bindings themselves, written the

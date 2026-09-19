@@ -49,6 +49,12 @@ from .appearance import (
 
 DEFAULT_FILE = "sheet.gridly"
 
+# What the command palette spends on each row besides the text: two columns of
+# padding on the left, two for the scrollbar, and a column of air so a key set
+# against the right never sits on top of it. Measured against Textual rather
+# than guessed, and test_palette checks that no row wraps at any width.
+PALETTE_MARGIN = 7
+
 # What a first run opens with, before anyone has pressed t.
 DEFAULT_THEME = "rose-pine"
 
@@ -170,27 +176,26 @@ class GridlyApp(App[None]):
     def get_system_commands(self, screen: Screen):
         yield from super().get_system_commands(screen)
         # Each command says which key does the same thing, so the palette
-        # teaches its own way out — next time the key is enough. The keys are
-        # set against the right of a column of their own and the descriptions
-        # against the left of theirs, so both edges run straight down the list
-        # and the key always sits the same distance from what it does.
+        # teaches its own way out — next time the key is enough. The key is
+        # pushed to the far right of the row and the description sits against
+        # the left, the way a menu sets out its shortcuts.
         keys = self.keys_by_action()
-        room = max((cell_len(key) for key in keys.values()), default=0)
+        room = self.size.width - PALETTE_MARGIN
         for action, title, description, discover in self.PALETTE:
             key = keys.get(action)
             if key is None:
-                lead = " " * room  # a palette-only command keeps the column
+                help_text = description  # nothing to put on the right
             else:
                 # `[` is a key of its own here, and would open a markup tag.
                 # Built outside the f-string: a backslash inside one is a
                 # syntax error before 3.12, and the tests run on 3.10.
                 safe = key.replace("[", "\\[")
-                lead = " " * (room - cell_len(key)) + f"[b]{safe}[/]"
+                gap = room - cell_len(description) - cell_len(key)
+                # On a screen too narrow to push it over, it sits beside the
+                # description instead — better than a row that wraps.
+                help_text = f"{description}{' ' * max(gap, 2)}[b]{safe}[/]"
             yield SystemCommand(
-                title,
-                f"{lead}   {description}",
-                partial(self.run_action, action),
-                discover,
+                title, help_text, partial(self.run_action, action), discover
             )
 
     def __init__(self, path: str | Path | None = None) -> None:

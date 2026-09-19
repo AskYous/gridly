@@ -1,6 +1,7 @@
 import os as _os, tempfile as _tf; _os.environ["XDG_CONFIG_HOME"] = _tf.mkdtemp()  # keep the real config out of it
 import asyncio, pathlib, tempfile
 from textual.command import CommandPalette
+from rich.cells import cell_len
 from textual.content import Content
 from textual.coordinate import Coordinate
 from textual.widgets import DataTable
@@ -75,44 +76,42 @@ async def main():
         print("keys shown       :", checked, "of", len(app.PALETTE), "commands")
         assert checked >= len(app.PALETTE) - 1, "only Toggle centring lacks a key"
 
-        # --- the keys sit against the right of their column and the
-        #     descriptions against the left of theirs, so both edges run
-        #     straight down the list. Measured on the rendered text, which is
-        #     what the palette shows — the markup around the key is not on
-        #     screen and must not be counted.
-        gutter, ends, starts = "   ", set(), set()
+        # --- the description sits against the left of the row and the key is
+        #     pushed to the far right of it, the way a menu sets out its
+        #     shortcuts. Measured on the rendered text, which is what the
+        #     palette shows — the markup around the key is not on screen and
+        #     must not be counted.
+        edges = set()
         for action, title, description, _ in app.PALETTE:
             shown = Content.from_markup(ours[title]).plain
-            starts.add(shown.index(description))
+            assert shown.startswith(description), (title, shown)
             key = keys.get(action)
             if key is not None:
-                # Right aligned: the key finishes hard against the gutter, so
-                # what sits before the description is the key and nothing else.
-                assert shown.endswith(gutter + description), (title, shown)
-                head = shown[: -len(gutter + description)]
-                assert head.endswith(key), (title, key, head)
-                assert head.lstrip() == key, ("padding is on the left", head)
-                ends.add(len(head))
-        print("descriptions all start at:", starts)
-        print("keys all finish at       :", ends)
-        assert len(starts) == 1, starts
-        assert len(ends) == 1, ends
+                assert shown.endswith(key), (title, key, shown)
+                # Nothing but space between the two: the gap is padding.
+                assert not shown[len(description) : -len(key)].strip(), shown
+                edges.add(cell_len(shown))
+        print("keys all end at  :", edges, f"(screen {app.size.width})")
+        assert len(edges) == 1, edges
+
+        # --- and no row is pushed wide enough to wrap onto a second line
+        widest = max(cell_len(Content.from_markup(h).plain) for h in ours.values())
+        print("widest row       :", widest, "of", app.size.width - 6, "usable")
+        assert widest <= app.size.width - 6, (widest, app.size.width)
 
         # --- the key is written the way the footer writes it, not the way the
         #     binding spells it
-        # The padding sits to the left of the key, so the key is what the line
-        # starts with once that is taken off.
-        wrote = lambda title: Content.from_markup(ours[title]).plain.lstrip()
-        assert wrote("Select one cell right").startswith("shift+→")
-        assert wrote("Settings").startswith(",")
-        assert wrote("Find").startswith("/")
+        wrote = lambda title: Content.from_markup(ours[title]).plain.rstrip()
+        assert wrote("Select one cell right").endswith("shift+→")
+        assert wrote("Settings").endswith(",")
+        assert wrote("Find").endswith("/")
         # A binding listing several keys shows the first, as the footer does.
-        assert wrote("Move row up").startswith("{")
+        assert wrote("Move row up").endswith("{")
         # And a bracket key survives being put through markup.
-        assert wrote("Move column left").startswith("["), wrote("Move column left")
-        assert wrote("Move column right").startswith("]")
+        assert wrote("Move column left").endswith("["), wrote("Move column left")
+        assert wrote("Move column right").endswith("]")
         print("written as       :", repr(ours["Select one cell right"]))
-        print("bracket key      :", repr(wrote("Move column left")))
+        print("bracket key      :", repr(wrote("Move column left")[-30:]))
 
         # --- a description with a bracket in it would be read as markup and
         #     swallowed, so none may have one
@@ -157,6 +156,26 @@ async def main():
         print("form             :", type(app.screen).__name__)
         assert isinstance(app.screen, RowFormScreen)
         await pilot.press("escape"); await pilot.pause()
+    # --- the right edge follows the terminal, so the keys stay against it
+    #     whatever size the window is, and still nothing wraps
+    for width in (70, 80, 120, 200):
+        app = GridlyApp(path)
+        async with app.run_test(size=(width, 30)) as pilot:
+            await pilot.pause()
+            keys = app.keys_by_action()
+            lines = {c.title: c.help for c in app.get_system_commands(app.screen)}
+            edges = {
+                cell_len(Content.from_markup(lines[title]).plain)
+                for action, title, _, _ in app.PALETTE
+                if keys.get(action) is not None
+            }
+            widest = max(
+                cell_len(Content.from_markup(h).plain) for h in lines.values()
+            )
+            print(f"  at {width:>3} columns: keys end at {edges}, widest row {widest}")
+            assert len(edges) == 1, (width, edges)
+            assert widest <= width - 6, (width, widest)
+            assert edges.pop() == width - 7, "right against the edge, less a column of air"
     print("ALL PALETTE TESTS DONE")
 
 def test_palette():
