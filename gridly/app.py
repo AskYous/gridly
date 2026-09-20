@@ -1150,7 +1150,10 @@ class GridlyApp(App[None]):
             else:
                 self.notify(f"Updated column {spec.name!r}.")
 
-        self.push_screen(ColumnScreen(column, self._columns), done)
+        self.push_screen(
+            ColumnScreen(column, self._columns, self.sheet.distinct_values(column.id)),
+            done,
+        )
 
     def action_delete_column(self) -> None:
         column = self.current_column()

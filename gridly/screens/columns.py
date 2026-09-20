@@ -109,7 +109,10 @@ class ColumnScreen(ModalScreen[ColumnSpec | None]):
     ]
 
     def __init__(
-        self, column: Column | None = None, columns: list[Column] | None = None
+        self,
+        column: Column | None = None,
+        columns: list[Column] | None = None,
+        existing_values: list[str] | None = None,
     ) -> None:
         super().__init__()
         self.column = column
@@ -117,6 +120,9 @@ class ColumnScreen(ModalScreen[ColumnSpec | None]):
         self.all = list(columns or [])
         #: The ones a month can be taken from.
         self.sources = sources_among(self.all, exclude=column.id if column else 0)
+        #: What this column already holds, offered as options on turning into
+        #: a dropdown, so a text column with little variety needs no retyping.
+        self.existing_values = existing_values or []
 
     def compose(self) -> ComposeResult:
         column = self.column
@@ -292,9 +298,31 @@ class ColumnScreen(ModalScreen[ColumnSpec | None]):
             row.remove()
 
     @on(Select.Changed, "#type")
-    @on(Select.Changed, "#function")
-    def type_changed(self) -> None:
+    async def type_changed(self) -> None:
+        await self._maybe_seed_options()
         self._sync_options_field()
+
+    @on(Select.Changed, "#function")
+    def function_changed(self) -> None:
+        self._sync_options_field()
+
+    async def _maybe_seed_options(self) -> None:
+        """Turning into a dropdown offers what the column already holds,
+        rather than an empty row for every option to be typed in by hand."""
+        if self._selected_type() is not ColumnType.SELECT or self._selected_function():
+            return
+        if self.column is not None and self.column.type is ColumnType.SELECT:
+            return  # already a dropdown — its own options are already on screen
+        if not self.existing_values:
+            return
+        rows = list(self.query(OptionRow))
+        if any(row.option[0] for row in rows):
+            return  # something is already typed in here; leave it alone
+        for row in rows:
+            await row.remove()
+        container = self.query_one("#options", Vertical)
+        for value in self.existing_values:
+            await container.mount(OptionRow(value))
 
     @on(Input.Submitted)
     def action_save(self) -> None:

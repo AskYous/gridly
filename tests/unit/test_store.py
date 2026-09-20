@@ -58,3 +58,27 @@ def test_store():
         except ValidationError as e: print("rejected", t.value, repr(raw), "->", e)
     print("ALL STORE TESTS DONE")
 
+
+def test_distinct_values():
+    d = tempfile.mkdtemp()
+    s = Sheet(pathlib.Path(d) / "d.gridly")
+    for seeded in s.columns():
+        s.delete_column(seeded.id)
+
+    status = s.add_column("Status", ColumnType.TEXT)
+    for i, value in enumerate(["Open", "open", "Closed", None, "Open", "Pending"]):
+        rid = s.rows()[0].id if i == 0 else s.add_row()
+        if value is not None:
+            s.set_cell(rid, status.id, value)
+    print("distinct:", s.distinct_values(status.id))
+    # first-seen order, case kept as typed, blanks skipped
+    assert s.distinct_values(status.id) == ["Open", "open", "Closed", "Pending"]
+
+    wide = s.add_column("Wide", ColumnType.TEXT)
+    for i in range(25):
+        s.set_cell(s.add_row(), wide.id, f"v{i}")
+    print("over cap:", s.distinct_values(wide.id, limit=20))
+    # too many distinct values to hand over as dropdown options
+    assert s.distinct_values(wide.id, limit=20) == []
+    print("ALL DISTINCT VALUE TESTS DONE")
+

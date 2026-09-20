@@ -578,6 +578,28 @@ class Sheet:
                 return number
         return None
 
+    def distinct_values(self, column_id: int, limit: int = 20) -> list[str]:
+        """A column's existing values, first-seen order, ready to seed a dropdown.
+
+        Empty past `limit` distinct values — a list that long is not one a
+        person would want handed to them as dropdown options, so it is left
+        for them to build by hand instead.
+        """
+        column = self.column(column_id)
+        if column is None:
+            return []
+        seen: dict[str, None] = {}
+        for row in self.rows():
+            value = row.values.get(column_id)
+            if value is None:
+                continue
+            text = display(column.type, value, column.format)
+            if text:
+                seen.setdefault(text, None)
+            if len(seen) > limit:
+                return []
+        return list(seen)
+
     def repeats_in(self, column_id: int) -> list[Any]:
         """Values this column holds more than once — what stops it being unique."""
         seen: dict[Any, int] = {}
