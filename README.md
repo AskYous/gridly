@@ -284,8 +284,9 @@ without being rewritten.
 ## Columns that work themselves out
 
 A column can take its values from another column instead of from you. In the
-column form (`c` or `e`), *Value* offers two of those beside the usual *Typed
-in*: **Calculated**, by a formula you write, and **Month of a date**.
+column form (`c` or `e`), *Value* offers three of those beside the usual *Typed
+in*: **Calculated**, by a formula you write, **Month of a date** and **Weekday
+of a date**.
 
 Nothing is stored. A worked-out column is worked out every time the sheet is
 read, so it can never be left standing beside a value that has since moved —
@@ -327,13 +328,27 @@ Pick the date column to read and how the month should be written.
 | number     | `9`         |
 | year       | `2026-09`   |
 
+### Weekday of a date
+
+Pick the date column to read and how the day should be written.
+
+| Written as | Looks like |
+| ---------- | ---------- |
+| name       | `Monday`   |
+| short      | `Mon`      |
+
+There is no number. Whether Sunday is the first day of the week or the seventh
+depends on where you are, and a number that means one thing to one reader and
+another to the next is worse than none.
+
 ### What a worked-out column may be
 
 The column still has a type, and the answer has to fit it. A formula goes in a
 number column, or a text one. A month has more to say: text takes any of the
 four wordings. A number column takes the month only as a number. A dropdown
 lists the twelve months itself — you do not type its options, and it will not
-take `2026-09`, which never stops adding new ones. Anything else — a date, a
+take `2026-09`, which never stops adding new ones. A weekday goes in text or a
+dropdown, which lists the seven days from Monday. Anything else — a date, a
 time, a yes/no — is refused in the form, with the reason.
 
 Delete a column that something else is worked out from, and that column stops

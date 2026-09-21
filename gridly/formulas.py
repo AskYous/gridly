@@ -18,7 +18,11 @@ from .coltypes import ColumnType, display
 
 #: What a column can be told to work out, and how the form offers it. The
 #: keys are what a sheet stores; the words are what the form shows.
-FUNCTIONS = {"sum": "Calculated", "month": "Month of a date"}
+FUNCTIONS = {
+    "sum": "Calculated",
+    "month": "Month of a date",
+    "weekday": "Weekday of a date",
+}
 
 #: The types a sum can be written into — whatever can hold a number.
 SUM_TYPES = (ColumnType.NUMBER, ColumnType.TEXT)
@@ -43,13 +47,31 @@ MONTH_NAMES = (
 #: The types a month can be written into. The rest are refused by `refusal`.
 MONTH_TYPES = (ColumnType.TEXT, ColumnType.NUMBER, ColumnType.SELECT)
 
+#: The ways a weekday can be written, and a Monday written each way. There is
+#: no number: whether Sunday is the first day or the seventh depends on where
+#: you are, and a number that means different things to different readers is
+#: worse than none.
+WEEKDAY_WORDINGS = {
+    "name": "Monday",
+    "short": "Mon",
+}
+
+#: In the order Python counts them, from Monday, so a date's weekday() is an
+#: index into it. Spelled out for the same reason the months are.
+WEEKDAY_NAMES = (
+    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+)
+
+#: How each part of a date can be written, by the function that takes it out.
+WORDINGS = {"month": MONTH_WORDINGS, "weekday": WEEKDAY_WORDINGS}
+
 
 @dataclass(frozen=True)
 class Formula:
     """What a computed column works out: which sum, from where, written how."""
 
     fn: str
-    #: The id of the column a month is read from. Unused by a sum.
+    #: The id of the column a month or weekday is read from. Unused by a sum.
     source: int = 0
     shows: str = DEFAULT_WORDING
     #: The arithmetic a sum is worked out by, written in column names.
@@ -81,9 +103,8 @@ class Formula:
         if fn not in FUNCTIONS or (fn == "sum" and not expr.strip()):
             return None
         shows = spec.get("shows", DEFAULT_WORDING)
-        return cls(
-            fn, source, shows if shows in MONTH_WORDINGS else DEFAULT_WORDING, expr
-        )
+        wordings = WORDINGS.get(fn, MONTH_WORDINGS)
+        return cls(fn, source, shows if shows in wordings else DEFAULT_WORDING, expr)
 
 
 def month_text(month: int, shows: str, year: int = 0) -> str:
@@ -97,6 +118,12 @@ def month_text(month: int, shows: str, year: int = 0) -> str:
     return MONTH_NAMES[month - 1]
 
 
+def weekday_text(weekday: int, shows: str) -> str:
+    """One day of the week, counted from Monday as nought, written as asked."""
+    name = WEEKDAY_NAMES[weekday]
+    return name[:3] if shows == "short" else name
+
+
 def value_of(spec: Formula, source_type: ColumnType, source_value) -> str:
     """What a formula works out for one row, as text for the column to read.
 
@@ -107,6 +134,8 @@ def value_of(spec: Formula, source_type: ColumnType, source_value) -> str:
         return ""
     if spec.fn == "month":
         return month_text(source_value.month, spec.shows, source_value.year)
+    if spec.fn == "weekday":
+        return weekday_text(source_value.weekday(), spec.shows)
     return ""
 
 
@@ -116,6 +145,8 @@ def options_for(spec: Formula) -> list[str]:
     Only asked for where the answers are countable — `refusal` turns away the
     wordings that are not, such as a year and month together.
     """
+    if spec.fn == "weekday":
+        return [weekday_text(day, spec.shows) for day in range(7)]
     return [month_text(month, spec.shows, 0) for month in range(1, 13)]
 
 
@@ -127,6 +158,10 @@ def refusal(spec: Formula, coltype: ColumnType) -> str | None:
         return f"A formula cannot go in a {coltype.label.lower()} column"
     if coltype is ColumnType.TEXT:
         return None
+    if spec.fn == "weekday":
+        if coltype is ColumnType.SELECT:
+            return None
+        return f"A weekday cannot go in a {coltype.label.lower()} column"
     if coltype is ColumnType.NUMBER:
         if spec.shows != "number":
             return (
@@ -142,7 +177,7 @@ def refusal(spec: Formula, coltype: ColumnType) -> str | None:
 
 
 def sources_among(columns, exclude: int = 0) -> list:
-    """The columns a month can be taken from: dates that are not worked out."""
+    """The columns a month or weekday can be taken from: dates not worked out."""
     return [
         column
         for column in columns

@@ -751,11 +751,11 @@ class GridlyApp(App[None]):
         return True
 
     def _describes(self, spec: Formula) -> str:
-        """What works a column out, read aloud: its sum, or the month of what."""
+        """What works a column out, read aloud: its sum, or the month or weekday of what."""
         if spec.fn == "sum":
             return spec.expr
         source = self.sheet.column(spec.source) if self.sheet else None
-        return f"the month of {source.name}" if source is not None else "a month"
+        return f"the {spec.fn} of {source.name}" if source is not None else f"a {spec.fn}"
 
     def _feeds(self, column: Column) -> bool:
         """Does another column work itself out from this one?

@@ -317,3 +317,28 @@ def test_typing_into_a_sum_column_is_refused():
     row = kept.add_row()
     with pytest.raises(ValueError):
         kept.set_cell(row, pay.id, 999)
+
+
+def test_a_weekday_is_worked_out_from_the_date_beside_it():
+    kept, day, _ = sheet()
+    weekday = kept.add_column(
+        "Weekday", T.TEXT, formula=Formula("weekday", day.id).encode()
+    )
+    row = kept.add_row()
+    kept.set_cell(row, day.id, datetime.date(2026, 9, 21))
+    assert values(kept, weekday) == ["Monday"]
+    kept.set_cell(row, day.id, datetime.date(2026, 9, 26))
+    assert values(kept, weekday) == ["Saturday"]
+    kept.set_cell(row, day.id, None)
+    assert values(kept, weekday) == [None]
+
+
+def test_a_weekday_dropdown_holds_the_day_as_one_of_its_options():
+    kept, day, _ = sheet()
+    days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    weekday = kept.add_column(
+        "Day of week", T.SELECT, days,
+        formula=Formula("weekday", day.id, "short").encode(),
+    )
+    kept.set_cell(kept.add_row(), day.id, datetime.date(2026, 9, 25))
+    assert values(kept, weekday) == ["Fri"]

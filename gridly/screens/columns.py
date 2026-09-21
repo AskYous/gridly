@@ -24,6 +24,7 @@ from ..appearance import ALIGNMENTS
 from ..formulas import (
     FUNCTIONS,
     MONTH_WORDINGS,
+    WORDINGS,
     Formula,
     options_for,
     read_sum,
@@ -118,7 +119,7 @@ class ColumnScreen(ModalScreen[ColumnSpec | None]):
         self.column = column
         #: Every column in the sheet, which is what a sum may name.
         self.all = list(columns or [])
-        #: The ones a month can be taken from.
+        #: The ones a month or weekday can be taken from.
         self.sources = sources_among(self.all, exclude=column.id if column else 0)
         #: What this column already holds, offered as options on turning into
         #: a dropdown, so a text column with little variety needs no retyping.
@@ -176,12 +177,14 @@ class ColumnScreen(ModalScreen[ColumnSpec | None]):
                         id="source",
                     )
                     yield Label("Written as", classes="field-label", id="shows-label")
+                    wordings = WORDINGS.get(spec.fn if spec else "", MONTH_WORDINGS)
                     yield Select(
-                        [
-                            (f"{example}", key)
-                            for key, example in MONTH_WORDINGS.items()
-                        ],
-                        value=spec.shows if spec else next(iter(MONTH_WORDINGS)),
+                        [(example, key) for key, example in wordings.items()],
+                        value=(
+                            spec.shows
+                            if spec and spec.shows in wordings
+                            else next(iter(wordings))
+                        ),
                         allow_blank=False,
                         id="shows",
                     )
@@ -261,14 +264,16 @@ class ColumnScreen(ModalScreen[ColumnSpec | None]):
         # which is about what people put in a column, not what it works out.
         is_dropdown = coltype is ColumnType.SELECT and not computed
         is_time = coltype is ColumnType.TIME and not computed
-        is_month = self._selected_function() == "month"
+        # A month and a weekday both take a part out of a date, so both ask
+        # which date and how the part should be written.
+        is_part = self._selected_function() in WORDINGS
         is_sum = self._selected_function() == "sum"
         self.query_one("#format-label", Label).display = is_time
         self.query_one("#format", Select).display = is_time
-        self.query_one("#source-label", Label).display = is_month
-        self.query_one("#source", Select).display = is_month
-        self.query_one("#shows-label", Label).display = is_month
-        self.query_one("#shows", Select).display = is_month
+        self.query_one("#source-label", Label).display = is_part
+        self.query_one("#source", Select).display = is_part
+        self.query_one("#shows-label", Label).display = is_part
+        self.query_one("#shows", Select).display = is_part
         self.query_one("#expr-label", Label).display = is_sum
         self.query_one("#expr", Input).display = is_sum
         self.query_one("#expr-help", Static).display = is_sum
@@ -304,7 +309,22 @@ class ColumnScreen(ModalScreen[ColumnSpec | None]):
 
     @on(Select.Changed, "#function")
     def function_changed(self) -> None:
+        self._offer_wordings()
         self._sync_options_field()
+
+    def _offer_wordings(self) -> None:
+        """List the ways the chosen part of a date can be written.
+
+        A wording both parts share, such as the full name, is kept across the
+        switch; one only a month has, such as its number, falls back to the first.
+        """
+        wordings = WORDINGS.get(self._selected_function())
+        if wordings is None:
+            return
+        shows = self.query_one("#shows", Select)
+        kept = shows.value if shows.value in wordings else next(iter(wordings))
+        shows.set_options([(example, key) for key, example in wordings.items()])
+        shows.value = kept
 
     async def _maybe_seed_options(self) -> None:
         """Turning into a dropdown offers what the column already holds,
@@ -361,7 +381,8 @@ class ColumnScreen(ModalScreen[ColumnSpec | None]):
             else:
                 if not self.sources:
                     return self._error(
-                        "There is no date column to take a month from — add one first"
+                        f"There is no date column to take a {function} from "
+                        "— add one first"
                     )
                 source = self.query_one("#source", Select).value
                 if source is Select.NULL:
@@ -377,7 +398,7 @@ class ColumnScreen(ModalScreen[ColumnSpec | None]):
             # so its options come from the sum rather than from the form.
             options = (
                 options_for(spec)
-                if coltype is ColumnType.SELECT and spec.fn == "month"
+                if coltype is ColumnType.SELECT and spec.fn in WORDINGS
                 else []
             )
             chosen, renames = {}, {}

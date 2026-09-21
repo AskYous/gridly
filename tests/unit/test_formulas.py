@@ -7,6 +7,7 @@ import pytest
 from gridly.coltypes import ColumnType
 from gridly.formulas import (
     MONTH_WORDINGS,
+    WEEKDAY_WORDINGS,
     Formula,
     month_text,
     options_for,
@@ -96,6 +97,70 @@ def test_types_a_month_does_not_fit_in(coltype, shows):
 def test_month_text_counts_from_one():
     assert month_text(1, "name") == "January"
     assert month_text(12, "name") == "December"
+
+
+# ------------------------------------------------------------------ weekdays
+
+MONDAY = datetime.date(2026, 9, 21)
+
+
+@pytest.mark.parametrize(
+    "day, name",
+    [
+        (MONDAY, "Monday"),
+        (datetime.date(2026, 9, 17), "Thursday"),
+        (datetime.date(2026, 9, 27), "Sunday"),
+        (datetime.date(2024, 2, 29), "Thursday"),   # a leap day
+    ],
+)
+def test_the_weekday_of_a_date(day, name):
+    assert value_of(Formula("weekday", 1), T.DATE, day) == name
+
+
+def test_the_ways_a_weekday_can_be_written():
+    assert value_of(Formula("weekday", 1, "short"), T.DATE, MONDAY) == "Mon"
+
+
+def test_every_weekday_wording_has_the_example_the_form_shows():
+    for shows, example in WEEKDAY_WORDINGS.items():
+        assert value_of(Formula("weekday", 1, shows), T.DATE, MONDAY) == example
+
+
+def test_a_weekday_has_nothing_to_work_out_without_a_date():
+    assert value_of(Formula("weekday", 1), T.DATE, None) == ""
+    assert value_of(Formula("weekday", 1), T.TEXT, "Monday") == ""
+
+
+def test_a_weekday_formula_survives_the_round_trip_to_storage():
+    spec = Formula("weekday", 4, "short")
+    assert Formula.decode(spec.encode()) == spec
+
+
+def test_a_wording_only_a_month_has_falls_back_for_a_weekday():
+    """There is no weekday number, so a stored one reads as the full name."""
+    spec = Formula.decode('{"fn": "weekday", "source": 2, "shows": "number"}')
+    assert spec == Formula("weekday", 2, "name")
+
+
+def test_a_dropdown_of_weekdays_lists_seven_from_monday():
+    assert options_for(Formula("weekday", 1)) == [
+        "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+    ]
+    assert options_for(Formula("weekday", 1, "short")) == [
+        "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun",
+    ]
+
+
+@pytest.mark.parametrize("coltype", [T.TEXT, T.SELECT])
+def test_types_a_weekday_fits_in(coltype):
+    assert refusal(Formula("weekday", 1), coltype) is None
+    assert refusal(Formula("weekday", 1, "short"), coltype) is None
+
+
+@pytest.mark.parametrize("coltype", [T.NUMBER, T.DATE, T.TIME, T.BOOLEAN])
+def test_types_a_weekday_does_not_fit_in(coltype):
+    complaint = refusal(Formula("weekday", 1), coltype)
+    assert complaint and "weekday" in complaint
 
 
 def test_only_a_date_column_can_be_read_from():
