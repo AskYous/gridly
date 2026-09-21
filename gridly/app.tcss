@@ -68,6 +68,23 @@ Screen {
     height: 5;
 }
 
+/* The row's log, under its fields: a gap to set it apart, then each comment
+   as when it was said over what was said. A comment takes the focus so enter
+   can open it, and shows that it has it the way an option row does. */
+.form .comments-heading {
+    padding: 2 0 0 0;
+}
+
+.form .comment {
+    height: auto;
+    padding: 0 1;
+    margin-top: 1;
+}
+
+.form .comment:focus {
+    background: $primary 20%;
+}
+
 .dialog Label {
     width: 1fr;
     padding-bottom: 1;

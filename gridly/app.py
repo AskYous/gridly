@@ -29,6 +29,7 @@ from .screens import (
     ExportScreen,
     HelpScreen,
     PickScreen,
+    RowChanges,
     RowFormScreen,
     SettingsScreen,
 )
@@ -84,6 +85,7 @@ class GridlyApp(App[None]):
         Binding("space", "edit_cell", "Edit"),
         Binding("o", "open_sheet", "Open", show=False),
         Binding("f", "edit_row", "Form", show=False),
+        Binding("C", "comment_row", "Comment", show=False),
         Binding("shift+right", "extend(0, 1)", "Select", key_display="shift+→", show=False),
         Binding("shift+left", "extend(0, -1)", "Select left", show=False),
         Binding("shift+up", "extend(-1, 0)", "Select up", show=False),
@@ -125,6 +127,7 @@ class GridlyApp(App[None]):
     PALETTE: list[tuple[str, str, str, bool]] = [
         ("edit_cell", "Edit cell", "Open the cell under the cursor", True),
         ("edit_row", "Edit row as a form", "One field per column, on its own screen", True),
+        ("comment_row", "Comment on row", "Add to the row's log, under its form", True),
         ("clear_cell", "Clear cell", "Leave the cell with no value at all", True),
         ("add_row", "Add row", "Append an empty row at the bottom", True),
         ("insert_row", "Insert row below", "Add an empty row under the cursor", True),
@@ -305,6 +308,7 @@ class GridlyApp(App[None]):
         self._widths = widths
         for label, column, width in zip(labels, self._columns, widths):
             table.add_column(label, key=str(column.id), width=width)
+        row_labels = self._row_labels()
         for number, row in enumerate(self._rows, start=1):
             cells = [drawn[column.id][number - 1] for column in self._columns]
             height = self.appearance.row_height(cells, widths)
@@ -313,7 +317,7 @@ class GridlyApp(App[None]):
                 *cells,
                 height=height,
                 key=str(row.id),
-                label=centred(Text(str(number), "dim"), height),
+                label=centred(row_labels[number - 1], height),
             )
 
         if self._rows and self._columns:
@@ -341,10 +345,33 @@ class GridlyApp(App[None]):
         widths = self.appearance.widths(
             labels,
             [drawn[column.id] for column in self._columns],
-            len(str(len(self._rows))),
+            max(map(widest, self._row_labels()), default=1),
             *self._room(),
         )
         return labels, drawn, widths
+
+    def _row_labels(self) -> list[Text]:
+        """Each row's number, and before it how many comments it has, if any.
+
+        Once any row has comments, the counts line up down the left of the
+        labels and the numbers against their right, the way an editor sets out
+        its line numbers — so a row with none keeps its number where the rest
+        have theirs. The mark is a plain character rather than an emoji: an
+        emoji is drawn two cells wide by some terminals and wider by others,
+        and spills over the count beside it.
+        """
+        marks = [f"≡{row.comment_count}" if row.comment_count else "" for row in self._rows]
+        room = max(map(len, marks), default=0)
+        digits = len(str(len(self._rows)))
+        labels = []
+        for number, mark in enumerate(marks, start=1):
+            if not room:
+                labels.append(Text(str(number), "dim"))
+                continue
+            label = Text(mark.ljust(room) + " ")
+            label.append(str(number).rjust(digits), "dim")
+            labels.append(label)
+        return labels
 
     def _widths_moved(self) -> bool:
         """Do the columns now want to be drawn a different width than they are?
@@ -783,38 +810,75 @@ class GridlyApp(App[None]):
         self._update_status()
 
     def action_edit_row(self) -> None:
+        self._open_row(commenting=False)
+
+    def action_comment_row(self) -> None:
+        """The row form, with the cursor already in a new comment."""
+        self._open_row(commenting=True)
+
+    def _open_row(self, commenting: bool) -> None:
         row = self.current_row()
         if row is None or not self._columns:
             self.notify("Nothing to edit yet.", severity="warning")
             return
         number = self._rows.index(row) + 1
 
-        def done(values: dict[int, Any] | None) -> None:
-            if values is None:
+        def done(changes: RowChanges | None) -> None:
+            if changes is None:
+                if form.logged:
+                    self.reload()  # the counts beside the row numbers moved
                 return
             changed = [
                 (column_id, value)
-                for column_id, value in values.items()
+                for column_id, value in changes.values.items()
                 if value != row.values.get(column_id)
             ]
+            # One change however much of the row it covers, so a status moved
+            # and the comment saying why are taken back together.
             with self.sheet.change(f"edit row {number}"):
                 for column_id, value in changed:
                     self.sheet.set_cell(row.id, column_id, value)
+                if changes.comment:
+                    self.sheet.add_comment(row.id, changes.comment)
+                for comment_id, body in changes.reworded.items():
+                    self.sheet.edit_comment(comment_id, body)
+                for comment_id in changes.removed:
+                    self.sheet.delete_comment(comment_id)
             self.reload()
-            self.notify(
-                f"Saved row {number}." if changed else f"Row {number} unchanged."
-            )
+            note = self._saved(number, changed, changes)
+            if note is not None:
+                self.notify(note)
+            elif not form.logged:
+                self.notify(f"Row {number} unchanged.")
 
-        self.push_screen(
-            RowFormScreen(
-                self._columns,
-                row,
-                number,
-                len(self._rows),
-                clash=lambda column, value: self._clash(row, column, value),
-            ),
-            done,
+        form = RowFormScreen(
+            self._columns,
+            row,
+            number,
+            len(self._rows),
+            clash=lambda column, value: self._clash(row, column, value),
+            sheet=self.sheet,
+            commenting=commenting,
         )
+        self.push_screen(form, done)
+
+    def _saved(
+        self, number: int, changed: list, changes: RowChanges
+    ) -> str | None:
+        """What saving the row form did, in a line — or nothing, if nothing."""
+        said = []
+        if changes.comment:
+            said.append("comment added")
+        if changes.reworded:
+            count = len(changes.reworded)
+            said.append(f"{count} {_plural(count, 'comment')} edited")
+        if changes.removed:
+            count = len(changes.removed)
+            said.append(f"{count} {_plural(count, 'comment')} removed, u to undo")
+        if not said:
+            return f"Saved row {number}." if changed else None
+        head = f"Saved row {number}" if changed else f"Row {number}"
+        return " · ".join([head, *said]) + "."
 
     # ------------------------------------------------------------------ copy
 

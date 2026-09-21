@@ -87,6 +87,7 @@ class HelpScreen(ModalScreen[None]):
             ("ctrl+s", "Save a text cell (enter adds a line)"),
             ("backspace", "Clear the cell"),
             ("f", "Edit the whole row as a form"),
+            ("C", "Comment on the row, under its form"),
         ]),
         ("Rows and columns", [
             ("a / i", "Add a row at the bottom / below"),

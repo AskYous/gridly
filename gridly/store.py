@@ -6,6 +6,7 @@ import json
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -60,6 +61,15 @@ CREATE TABLE IF NOT EXISTS cells (
     value     TEXT,
     PRIMARY KEY (row_id, column_id)
 );
+-- A row's log: what happened to it, in the order it happened. Times are local
+-- and written out as text, which sorts the same way they read.
+CREATE TABLE IF NOT EXISTS comments (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    row_id   INTEGER NOT NULL REFERENCES rows(id) ON DELETE CASCADE,
+    body     TEXT NOT NULL,
+    created  TEXT NOT NULL,
+    edited   TEXT NOT NULL DEFAULT ''
+);
 """
 
 
@@ -110,6 +120,19 @@ class Row:
     id: int
     position: int
     values: dict[int, Any] = field(default_factory=dict)
+    #: How many comments the row has. The comments themselves are only read
+    #: when the row is opened, since the grid has no room to show them.
+    comment_count: int = 0
+
+
+@dataclass
+class Comment:
+    id: int
+    row_id: int
+    body: str
+    #: When it was written, and when it was last reworded — empty if never.
+    created: str
+    edited: str = ""
 
 
 class Sheet:
@@ -179,7 +202,7 @@ class Sheet:
     # ------------------------------------------------------------------ undo
 
     #: The tables a snapshot covers, in the order they can be put back.
-    _TABLES = ("columns", "rows", "cells")
+    _TABLES = ("columns", "rows", "cells", "comments")
 
     def _capture(self) -> tuple:
         """Everything in the sheet, as plain rows.
@@ -194,7 +217,7 @@ class Sheet:
         )
 
     def _put_back(self, state: tuple) -> None:
-        for table in reversed(self._TABLES):        # cells reference the rest
+        for table in reversed(self._TABLES):   # the later ones reference the rest
             self.db.execute(f"DELETE FROM {table}")
         for table, saved in zip(self._TABLES, state):
             if not saved:
@@ -292,6 +315,12 @@ class Sheet:
             coltype = by_type.get(cell["column_id"])
             if row is not None and coltype is not None:
                 row.values[cell["column_id"]] = decode(coltype, cell["value"])
+        for count in self.db.execute(
+            "SELECT row_id, COUNT(*) AS n FROM comments GROUP BY row_id"
+        ):
+            row = index.get(count["row_id"])
+            if row is not None:
+                row.comment_count = count["n"]
         self._work_out(columns, result)
         return result
 
@@ -636,6 +665,7 @@ class Sheet:
 
     def delete_row(self, row_id: int) -> None:
         self._checkpoint("delete row")
+        self.db.execute("DELETE FROM comments WHERE row_id = ?", (row_id,))
         self.db.execute("DELETE FROM cells WHERE row_id = ?", (row_id,))
         self.db.execute("DELETE FROM rows WHERE id = ?", (row_id,))
         self.db.commit()
@@ -657,6 +687,67 @@ class Sheet:
         )
         self.db.commit()
 
+    # -------------------------------------------------------------- comments
+
+    def comments(self, row_id: int) -> list[Comment]:
+        """A row's comments, newest first: the latest word is the one wanted."""
+        return [
+            Comment(r["id"], r["row_id"], r["body"], r["created"], r["edited"])
+            for r in self.db.execute(
+                "SELECT id, row_id, body, created, edited FROM comments "
+                "WHERE row_id = ? ORDER BY created DESC, id DESC",
+                (row_id,),
+            )
+        ]
+
+    def add_comment(
+        self, row_id: int, body: str, now: datetime | None = None
+    ) -> int:
+        """Say something about a row. Returns the comment's id."""
+        body = _worded(body)
+        self._checkpoint("add comment")
+        cursor = self.db.execute(
+            "INSERT INTO comments (row_id, body, created) VALUES (?, ?, ?)",
+            (row_id, body, _stamp(now)),
+        )
+        self.db.commit()
+        return cursor.lastrowid
+
+    def edit_comment(
+        self, comment_id: int, body: str, now: datetime | None = None
+    ) -> None:
+        """Reword a comment. It keeps when it was written, and says it was edited."""
+        body = _worded(body)
+        was = self.db.execute(
+            "SELECT body FROM comments WHERE id = ?", (comment_id,)
+        ).fetchone()
+        if was is None:
+            raise KeyError(comment_id)
+        if was["body"] == body:
+            return  # saying the same thing again is not an edit
+        self._checkpoint("edit comment")
+        self.db.execute(
+            "UPDATE comments SET body = ?, edited = ? WHERE id = ?",
+            (body, _stamp(now), comment_id),
+        )
+        self.db.commit()
+
+    def delete_comment(self, comment_id: int) -> None:
+        self._checkpoint("delete comment")
+        self.db.execute("DELETE FROM comments WHERE id = ?", (comment_id,))
+        self.db.commit()
+
+    def restore_comment(self, comment: Comment) -> None:
+        """Put a removed comment back as it was, in the same place in the log."""
+        self._checkpoint("restore comment")
+        self.db.execute(
+            "INSERT INTO comments (id, row_id, body, created, edited) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (comment.id, comment.row_id, comment.body, comment.created,
+             comment.edited),
+        )
+        self.db.commit()
+
     def _renumber(self, table: str) -> None:
         ids = [
             r["id"]
@@ -667,3 +758,16 @@ class Sheet:
                 f"UPDATE {table} SET position = ? WHERE id = ?", (position, row_id)
             )
         self.db.commit()
+
+
+def _stamp(now: datetime | None) -> str:
+    """A moment as the comments table keeps it, to the second."""
+    return (now or datetime.now()).isoformat(sep=" ", timespec="seconds")
+
+
+def _worded(body: str) -> str:
+    """A comment's text, without the blank lines a text box leaves around it."""
+    body = body.strip()
+    if not body:
+        raise ValueError("a comment needs something in it")
+    return body

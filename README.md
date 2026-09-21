@@ -143,6 +143,7 @@ themselves out* below.
 | `ctrl+s`    | save a text cell (`enter` adds a line there)  |
 | `space`     | same as `enter`                               |
 | `f`         | open the whole row as a form                  |
+| `C`         | comment on the row, under its form            |
 | `w`         | column width: large, fit, small, unlimited    |
 | `W`         | long values wrap, or end in an ellipsis       |
 | `s`         | row size: small or large                      |
@@ -356,6 +357,54 @@ where prose and figures are read from. *Where values sit by default* in the
 settings page (`,`) turns that centring off across the sheet — for the columns
 still on Automatic. A column given an alignment of its own keeps it either way.
 
+## Comments
+
+Every row keeps a log of its own, the way a ticket keeps its comment thread —
+for what happened to it and when, which a cell has no room for.
+
+The log sits under the row form. `f` opens the form at its fields, as before;
+`C` opens it with the cursor already in a new comment, so writing one down is
+`C`, the words, `ctrl+s`. The form stays open with the comment at the top of the
+list and the box empty again, for the next one; `esc` goes back to the grid.
+
+```
+  Comments  2 · enter edits one, backspace removes it
+  ╭──────────────────────────────────────────────╮
+  │ write a comment · ctrl+s posts it            │
+  ╰──────────────────────────────────────────────╯
+
+  2026-09-21 14:05
+  Called the vendor. A fix lands Thursday.
+
+  2026-09-20 09:12 · edited
+  Repro'd on staging, only with SSO accounts
+```
+
+The newest comes first, since the latest word is usually the one you came for.
+Each is stamped with the minute it was written, and one that has been reworded
+says so beside its time rather than pretending it was always that way.
+
+A comment is written down the moment you post it, the way a ticket's thread
+works, rather than waiting for the row. Tab onto one and `enter` opens it for
+rewording: `ctrl+s` keeps the new wording, `esc` leaves it as it was. `backspace`
+removes it there and then, striking it through so you can see what went, and
+pressing it again puts it back as it was. Emptying a comment out and posting it
+does the same as removing it.
+
+The fields still wait for `ctrl+s`, and `esc` still throws them away — but not
+the comments, which were already posted. Saving the row with something still
+in the comment box posts that too, as part of the same change, so a status
+moved and the comment saying why are taken back together by `u`.
+
+In the grid, a row with comments says how many before its number — `≡3 12` —
+and a row with none shows just the number. The numbers sit against the right of
+their column then, the way an editor sets out line numbers, so they still line
+up.
+
+`D` does not copy comments to the duplicate: a log is about the row it was
+written on. Deleting a row deletes its comments, and `u` brings both back.
+Comments are not part of a CSV export or of `/`, which look at cells.
+
 ## Multi-line text
 
 A text column holds newlines. A row shows as many of them as its height allows
@@ -382,7 +431,7 @@ accept happily.
 `u` takes back the last change and `U` puts it back, forty deep. Everything
 that touches the sheet is covered: editing a cell, adding or deleting a row or
 column, moving a column, retyping one and losing the values that no longer fit,
-duplicating a row, saving the row form, and pasting.
+duplicating a row, saving the row form — its comments included — and pasting.
 
 A run of edits that happened together is taken back together — pasting a block
 of thirty cells is one press of `u`, not thirty. Because of that, deleting a row
