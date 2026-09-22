@@ -31,7 +31,8 @@ DEFAULT_CENTRED = True
 # How wide a column may get, in the order w cycles them. These are caps, not
 # widths: a column narrower than its cap keeps its own size, so a yes/no column
 # never gets padded out. "fit" has no fixed cap — it shares the viewport out
-# between the columns so the whole table fits across.
+# between the columns so the whole table fits across, squeezing the wide ones
+# when there is too little room and growing them all when there is too much.
 COLUMN_WIDTHS = ("large", "fit", "small", "unlimited")
 COLUMN_CAPS = {"large": 36, "small": 16, "fit": None, "unlimited": None}
 DEFAULT_COLUMN_WIDTH = "fit"
@@ -162,7 +163,11 @@ class Appearance:
         available: int,
         gutters: int,
     ) -> list[int | None]:
-        """How wide each column gets. A cap never pads a narrow column out."""
+        """How wide each column gets.
+
+        A cap never pads a narrow column out. Fitting does, since it fills the
+        screen whichever way it has to go.
+        """
         naturals = [
             max([widest(label)] + [widest(cell) for cell in cells] + [1])
             for label, cells in zip(labels, columns)
@@ -175,8 +180,10 @@ class Appearance:
 
         # Everything the table spends besides the columns themselves.
         budget = available - (row_label + gutters) - gutters * len(naturals)
-        if available <= 0 or budget <= 0 or sum(naturals) <= budget:
+        if available <= 0 or budget <= 0:
             return naturals
+        if sum(naturals) <= budget:
+            return stretched(naturals, budget)
         cap = fair_cap(naturals, budget, MIN_FIT_WIDTH)
         return [min(natural, cap) for natural in naturals]
 
@@ -210,6 +217,22 @@ def fair_cap(naturals: list[int], budget: int, minimum: int) -> int:
         else:
             return max(minimum, remaining // left)
     return max(naturals, default=minimum)
+
+
+def stretched(naturals: list[int], budget: int) -> list[int]:
+    """Every column grown by the same amount so that together they fill the budget.
+
+    A table narrower than the screen otherwise huddles against the left with
+    a blank stretch beside it. Whatever does not divide evenly goes to the
+    first few columns, a character each.
+    """
+    if not naturals:
+        return naturals
+    extra, odd = divmod(budget - sum(naturals), len(naturals))
+    return [
+        width + extra + (1 if index < odd else 0)
+        for index, width in enumerate(naturals)
+    ]
 
 
 def widest(text: Text) -> int:

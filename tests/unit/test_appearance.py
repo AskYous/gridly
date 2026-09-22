@@ -21,6 +21,7 @@ from gridly.appearance import (
     fit,
     lines_needed,
     render,
+    stretched,
     widest,
 )
 
@@ -150,6 +151,18 @@ def test_no_columns_at_all():
     assert fair_cap([], 30, MIN_FIT_WIDTH) == MIN_FIT_WIDTH
 
 
+def test_spare_room_is_shared_out_evenly():
+    assert stretched([3, 4, 5], 30) == [9, 10, 11]
+
+
+def test_what_does_not_divide_goes_to_the_first_columns():
+    assert stretched([3, 4, 5], 32) == [10, 11, 11]
+
+
+def test_nothing_to_stretch():
+    assert stretched([], 30) == []
+
+
 # -------------------------------------------------------------- the settings
 
 def test_the_defaults_are_all_real_choices():
@@ -217,7 +230,7 @@ def test_no_value_gets_to_own_the_whole_screen():
     assert view.row_height([Text("a" * 5000)], [10]) == MAX_WRAP_LINES
 
 
-@pytest.mark.parametrize("width", list(COLUMN_WIDTHS))
+@pytest.mark.parametrize("width", [w for w in COLUMN_WIDTHS if w != "fit"])
 def test_a_narrow_column_is_never_padded_out(width):
     view = Appearance(column_width=width)
     widths = view.widths([Text("Done")], [[Text("yes")]], 3, 200, 2)
@@ -243,6 +256,17 @@ def test_fitting_never_spends_more_room_than_there_is():
     widths = view.widths(labels, cells, row_label, available, gutters)
     spent = sum(w + gutters for w in widths) + row_label + gutters
     assert spent <= available, (widths, spent)
+
+
+def test_fitting_fills_a_screen_wider_than_the_table():
+    view = Appearance(column_width="fit")
+    labels = [Text("Done"), Text("Note")]
+    cells = [[Text("yes")], [Text("short")]]
+    available, gutters, row_label = 80, 2, 2
+    widths = view.widths(labels, cells, row_label, available, gutters)
+    spent = sum(w + gutters for w in widths) + row_label + gutters
+    assert spent == available, (widths, spent)
+    assert widths[0] > len("Done") and widths[1] > len("short"), widths
 
 
 def test_fitting_with_no_room_yet_falls_back_to_what_values_need():

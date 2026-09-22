@@ -28,7 +28,7 @@ def spread(app):
     t = app.query_one("#grid", DataTable)
     pad = 2 * t.cell_padding
     used = sum(c.width + pad for c in t.ordered_columns) + t._row_label_column_width
-    return used, t.content_size.width, {str(c.label).split("  ")[0]: c.width for c in t.ordered_columns}
+    return used, t.scrollable_content_region.width, {str(c.label).split("  ")[0]: c.width for c in t.ordered_columns}
 
 async def main():
     app = GridlyApp(path)
@@ -57,7 +57,8 @@ async def main():
         used, available, widths = spread(app)
         print("at 140 wide  :", widths, "-> uses", used, "of", available)
         assert used <= available
-        assert widths["Note"] == len(LONG), "with room to spare, nothing is squeezed"
+        assert widths["Note"] >= len(LONG), "with room to spare, nothing is squeezed"
+        assert used == available, "with room to spare, the table fills the screen"
 
         # --- a hopeless viewport falls back to the floor rather than vanishing
         await pilot.resize_terminal(24, 20); await pilot.pause(); await pilot.pause()
@@ -73,6 +74,28 @@ async def main():
         assert app2.appearance.column_width == "fit"
         used, available, _ = spread(app2)
         assert used <= available, (used, available)
+
+    # --- a sheet too tall for the screen: the columns fill the room beside
+    # the scrollbar, and give it back when the scrollbar goes
+    tall = Sheet(path)
+    for _ in range(30):
+        tall.add_row()
+    tall.close()
+    app3 = GridlyApp(path)
+    async with app3.run_test(size=(80, 20)) as pilot:
+        await pilot.pause(); await pilot.pause()
+        t = app3.query_one("#grid", DataTable)
+        used, available, _ = spread(app3)
+        print("tall, 80x20  :", "uses", used, "of", available, "beside the scrollbar")
+        assert t.show_vertical_scrollbar
+        assert used == available < t.content_size.width, (used, available)
+        assert t.max_scroll_x == 0, "nothing hides under the scrollbar"
+
+        await pilot.resize_terminal(80, 50); await pilot.pause(); await pilot.pause()
+        used, available, _ = spread(app3)
+        print("tall, 80x50  :", "uses", used, "of", available)
+        assert not t.show_vertical_scrollbar
+        assert used == available == t.content_size.width, (used, available)
     print("ALL FIT TESTS DONE")
 
 def test_fit():

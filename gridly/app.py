@@ -72,6 +72,11 @@ class Grid(DataTable):
     def on_resize(self, event: events.Resize) -> None:
         self.post_message(self.Resized())
 
+    def watch_show_vertical_scrollbar(self, shown: bool) -> None:
+        # The scrollbar takes its width out of the columns' room, so a table
+        # fitted before it arrived now spills under it and scrolls sideways.
+        self.post_message(self.Resized())
+
 
 class GridlyApp(App[None]):
     CSS_PATH = "app.tcss"
@@ -385,7 +390,8 @@ class GridlyApp(App[None]):
     def _room(self) -> tuple[int, int]:
         """How much width there is to share out, and what each column costs."""
         table = self.table
-        return table.content_size.width or table.size.width, 2 * table.cell_padding
+        room = table.scrollable_content_region.width  # beside any scrollbar
+        return room or table.size.width, 2 * table.cell_padding
 
     def _update_status(self) -> None:
         if self.sheet is None or self._cycle_timer is not None:
