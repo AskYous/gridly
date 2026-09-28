@@ -1,0 +1,9 @@
+.git
+.github
+.venv
+.pytest_cache
+.coverage
+**/__pycache__
+*.egg-info
+*.gridly
+tests

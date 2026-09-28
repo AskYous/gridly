@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 import sys
 from dataclasses import replace
 from functools import partial
@@ -86,6 +87,10 @@ class GridlyApp(App[None]):
     # write the default theme over it on the way up.
     _theme_loaded = False
 
+    # Also set in __init__; here so that anything Textual asks before then
+    # gets an answer.
+    read_only = False
+
     BINDINGS = [
         Binding("space", "edit_cell", "Edit"),
         Binding("o", "open_sheet", "Open", show=False),
@@ -169,6 +174,21 @@ class GridlyApp(App[None]):
     # Textual's own system commands already cover these two.
     PALETTE_ELSEWHERE = {"change_theme", "quit"}
 
+    # What a read-only sheet will not do: anything that changes it, and opening
+    # or writing other files, which on a server would reach the server's own.
+    # Looking, finding, copying and every view setting stay.
+    CHANGES = {
+        "edit_cell", "edit_row", "comment_row", "clear_cell",
+        "add_row", "insert_row", "duplicate_row", "delete_row",
+        "add_column", "edit_column", "delete_column",
+        "move_row", "move_column", "undo", "redo",
+        "open_sheet", "export",
+    }
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        """Hide what a read-only sheet cannot do, and refuse it if asked anyway."""
+        return not (self.read_only and action in self.CHANGES)
+
     def keys_by_action(self) -> dict[str, str]:
         """The key that runs each action, written the way the footer writes it.
 
@@ -190,6 +210,8 @@ class GridlyApp(App[None]):
         keys = self.keys_by_action()
         room = self.size.width - PALETTE_MARGIN
         for action, title, description, discover in self.PALETTE:
+            if not self.check_action(action.split("(")[0], ()):
+                continue
             key = keys.get(action)
             if key is None:
                 help_text = description  # nothing to put on the right
@@ -206,8 +228,10 @@ class GridlyApp(App[None]):
                 title, help_text, partial(self.run_action, action), discover
             )
 
-    def __init__(self, path: str | Path | None = None) -> None:
+    def __init__(self, path: str | Path | None = None, read_only: bool = False) -> None:
         super().__init__()
+        #: Show the sheet and change nothing in it. Set before opening, which reads it.
+        self.read_only = read_only
         #: None until a sheet has been chosen, which the picker does on mount.
         self.sheet: Sheet | None = None
         if path is not None:
@@ -270,8 +294,13 @@ class GridlyApp(App[None]):
 
     def _open(self, path: str | Path) -> None:
         """Take up a sheet, and remember that it was opened."""
-        self.sheet = Sheet(path)
+        self.sheet = Sheet(path, read_only=self.read_only)
         self.sub_title = _short_path(self.sheet.path)
+        if self.read_only:
+            # Only looked at, and on a server a copy about to be deleted — not
+            # something to offer again from the recent list.
+            self.sub_title = f"{self.sheet.path.name} (read-only)"
+            return
         config.remember(self.sheet.path)
 
     def _chose(self, path: str | None) -> None:
@@ -710,7 +739,10 @@ class GridlyApp(App[None]):
 
     @on(DataTable.CellSelected)
     def cell_selected(self) -> None:
-        self.action_edit_cell()
+        # Enter or a second tap on a cell. Called directly, so the check that
+        # guards the key does not run — but on a read-only sheet it is just a tap.
+        if not self.read_only:
+            self.action_edit_cell()
 
     def action_edit_cell(self) -> None:
         column, row = self.current_column(), self.current_row()
@@ -988,7 +1020,7 @@ class GridlyApp(App[None]):
 
     def on_paste(self, event: events.Paste) -> None:
         """Drop a block of cells copied from a spreadsheet in at the cursor."""
-        if self.screen is not self.screen_stack[0]:
+        if self.screen is not self.screen_stack[0] or self.read_only:
             return
         block = parse_block(event.text)
         if not block:
@@ -1283,10 +1315,26 @@ def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if args and args[0] in ("-h", "--help"):
         print(
-            f"usage: gridly [FILE]\n\n"
+            f"usage: gridly [FILE] [--read-only]\n\n"
             f"Opens FILE, creating it if needed. With no FILE, offers the sheets you\n"
-            f"had open lately, or ./{DEFAULT_FILE} if there are none yet."
+            f"had open lately, or ./{DEFAULT_FILE} if there are none yet.\n\n"
+            f"--read-only shows FILE without changing it, or opening anything else."
         )
+        return 0
+
+    read_only = "--read-only" in args
+    if read_only:
+        args.remove("--read-only")
+        # Nothing to create and nothing to pick from: it has to be a real sheet.
+        if not args:
+            print("--read-only needs a sheet to show:  gridly FILE --read-only")
+            return 1
+        try:
+            Sheet(args[0], read_only=True).close()
+        except sqlite3.DatabaseError:
+            print(f"Cannot read {args[0]} as a Gridly sheet.")
+            return 1
+        GridlyApp(args[0], read_only=True).run()
         return 0
 
     # No file named and nothing opened before: there is nothing to choose

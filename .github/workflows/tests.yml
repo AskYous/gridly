@@ -32,3 +32,26 @@ jobs:
       # feature arriving without tests rather than a line or two of drift.
       - name: All tests, with a coverage floor
         run: python -m pytest --cov=gridly --cov-report=term-missing --cov-fail-under=93
+
+  # Every push to main that passes goes to the server, so the phone never runs
+  # a Gridly the tests have not. CapRover builds the Dockerfile itself.
+  deploy:
+    needs: pytest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency: deploy
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to CapRover
+        env:
+          # The app's own deploy token, from its Deployment tab — it can deploy
+          # this app and nothing else.
+          CAPROVER_APP_TOKEN: ${{ secrets.CAPROVER_APP_TOKEN }}
+        run: |
+          git archive --format tar --output deploy.tar HEAD
+          npx --yes caprover deploy \
+            --caproverUrl https://captain.admin.yousefshanawany.com \
+            --appName gridly \
+            --appToken "$CAPROVER_APP_TOKEN" \
+            --tarFile deploy.tar

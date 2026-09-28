@@ -138,11 +138,24 @@ class Comment:
 class Sheet:
     """A single table of data living in one SQLite file."""
 
-    def __init__(self, path: str | Path) -> None:
+    def __init__(self, path: str | Path, read_only: bool = False) -> None:
         self.path = Path(path).expanduser().resolve()
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        is_new = not self.path.exists()
-        self.db = sqlite3.connect(self.path)
+        self.read_only = read_only
+        if read_only:
+            # Read into memory and leave the file alone. An older sheet is still
+            # brought up to date below, but only in the copy, and any write that
+            # slipped through would land there rather than in the file.
+            source = sqlite3.connect(f"{self.path.as_uri()}?mode=ro", uri=True)
+            self.db = sqlite3.connect(":memory:")
+            try:
+                source.backup(self.db)
+            finally:
+                source.close()
+            is_new = False
+        else:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            is_new = not self.path.exists()
+            self.db = sqlite3.connect(self.path)
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys = ON")
         self.db.executescript(_SCHEMA)
@@ -155,7 +168,8 @@ class Sheet:
             (SCHEMA_VERSION,),
         )
         self.db.commit()
-        if is_new or not self.columns():
+        # A sheet only being looked at is shown as it is, even when empty.
+        if not read_only and (is_new or not self.columns()):
             self._seed()
         self._undo.clear()  # a brand new sheet has nothing to go back to
 

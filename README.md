@@ -26,6 +26,22 @@ Each browser session starts a real Gridly process with this machine's file
 access, so it listens on `127.0.0.1` only. `--host` widens that, and is worth
 doing only on a network you trust.
 
+### On a phone
+
+```sh
+gridly-web --uploads            # a page that asks for a sheet
+```
+
+The page offers a file picker, so a sheet can come from anywhere the phone
+can reach — Google Drive included. The sheet is shown read-only by the same
+app, and nothing else on the server is offered. The copy is deleted half an
+hour after the page is closed; the delay is there because a phone drops the
+connection whenever it switches app.
+
+This is what runs on the server, from the `Dockerfile`. Every push to `main`
+that passes the tests is deployed there by CapRover, which also puts HTTPS
+and a password in front of it.
+
 ## Tests
 
 ```sh
