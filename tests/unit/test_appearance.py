@@ -3,11 +3,14 @@
 import datetime
 
 import pytest
+from rich.console import Console
 from rich.text import Text
 
 from gridly.coltypes import ColumnType
 from gridly.store import Column
 from gridly.appearance import (
+    BLANK,
+    BOOLEAN_LOOKS,
     CENTRED,
     COLUMN_CAPS,
     COLUMN_WIDTHS,
@@ -339,3 +342,28 @@ def test_a_drawn_boolean_cell_is_still_centred():
     """Through Appearance.cell, which is what the grid actually gets."""
     cell = Appearance(padded=True).cell(column(ColumnType.BOOLEAN), True)
     assert cell.justify == "center"
+
+
+def test_each_boolean_look_draws_yes_and_no_differently():
+    for look in BOOLEAN_LOOKS:
+        yes = Appearance(booleans=look).cell(column(ColumnType.BOOLEAN), True)
+        no = Appearance(booleans=look).cell(column(ColumnType.BOOLEAN), False)
+        assert (yes.plain.rstrip(BLANK), no.plain.rstrip(BLANK)) == BOOLEAN_LOOKS[look]
+
+
+def test_yes_and_no_start_in_the_same_place_when_centred():
+    for look in BOOLEAN_LOOKS:
+        for width in (6, 7):
+            starts = set()
+            for value in (True, False):
+                cell = render(column(ColumnType.BOOLEAN), value, 1, booleans=look)
+                line = Console(width=width).render_lines(cell, pad=False)[0]
+                drawn = "".join(segment.text for segment in line)
+                starts.add(len(drawn) - len(drawn.lstrip()))
+            assert len(starts) == 1, (look, width)
+
+
+def test_the_boolean_look_is_remembered(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    Appearance(booleans="boxes").save()
+    assert Appearance.load().booleans == "boxes"

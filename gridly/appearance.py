@@ -45,6 +45,18 @@ MIN_FIT_WIDTH = 6
 OVERFLOWS = ("ellipsis", "wrap")
 DEFAULT_OVERFLOW = "ellipsis"
 
+# How a yes/no value is drawn: what a yes looks like, then what a no does.
+BOOLEAN_LOOKS = {
+    "both": ("✓ Yes", "✗ No"),
+    "words": ("Yes", "No"),
+    "symbols": ("✓", "✗"),
+    "boxes": ("[x]", "[ ]"),
+}
+DEFAULT_BOOLEAN_LOOK = "both"
+
+# Looks like a space but is not one, so centring leaves it alone.
+BLANK = "\u2800"
+
 # However much a wrapped row wants, it does not get to own the whole screen.
 MAX_WRAP_LINES = 12
 
@@ -60,6 +72,8 @@ class Appearance:
     centred: bool = DEFAULT_CENTRED
     column_width: str = DEFAULT_COLUMN_WIDTH
     overflow: str = DEFAULT_OVERFLOW
+    #: One of BOOLEAN_LOOKS.
+    booleans: str = DEFAULT_BOOLEAN_LOOK
 
     @classmethod
     def load(cls) -> Appearance:
@@ -76,6 +90,8 @@ class Appearance:
             appearance.column_width = saved["column_width"]
         if saved.get("overflow") in OVERFLOWS:
             appearance.overflow = saved["overflow"]
+        if saved.get("booleans") in BOOLEAN_LOOKS:
+            appearance.booleans = saved["booleans"]
         return appearance
 
     def save(self) -> None:
@@ -85,6 +101,7 @@ class Appearance:
             centred=self.centred,
             column_width=self.column_width,
             overflow=self.overflow,
+            booleans=self.booleans,
         )
 
     # ------------------------------------------------------------- switching
@@ -122,9 +139,11 @@ class Appearance:
         """A value drawn for the row height that is in force."""
         if self.wrapping:
             # The row will be grown to fit this, so nothing is squeezed or cut.
-            return render(column, value, MAX_WRAP_LINES, self.centred)
+            return render(column, value, MAX_WRAP_LINES, self.centred, self.booleans)
         height = 1 + self.spare
-        drawn = centred(render(column, value, height, self.centred), height)
+        drawn = centred(
+            render(column, value, height, self.centred, self.booleans), height
+        )
         if self.capped:
             drawn.no_wrap = True
             drawn.overflow = "ellipsis"
@@ -308,17 +327,30 @@ def sits(column: Column, middle: bool = DEFAULT_CENTRED) -> str | None:
 
 
 def render(
-    column: Column, value: Any, lines: int, middle: bool = DEFAULT_CENTRED
+    column: Column,
+    value: Any,
+    lines: int,
+    middle: bool = DEFAULT_CENTRED,
+    booleans: str = DEFAULT_BOOLEAN_LOOK,
 ) -> Text:
     """How a value looks inside the grid."""
     across = sits(column, middle)
     if value is None:
         return Text("·", "dim", justify=across)
     if column.type is ColumnType.BOOLEAN:
+        yes, no = BOOLEAN_LOOKS.get(booleans, BOOLEAN_LOOKS[DEFAULT_BOOLEAN_LOOK])
+        # A two-letter No and a three-letter Yes cannot both be centred in the
+        # same column, so the shorter is padded out to the longer and the two
+        # start in the same place. The padding is a blank braille cell because
+        # Rich trims real spaces before centring.
+        size = max(cell_len(yes), cell_len(no))
+        yes, no = (label + BLANK * (size - cell_len(label)) for label in (yes, no))
+        # A lone mark is small enough to need the extra weight; a word is not.
+        weight = "bold " if booleans == "symbols" else ""
         return (
-            Text("✓", "green", justify=across)
+            Text(yes, weight + "green", justify=across)
             if value
-            else Text("✗", "red dim", justify=across)
+            else Text(no, weight + "red", justify=across)
         )
     if column.type is ColumnType.NUMBER:
         return Text(display(column.type, value), "cyan", justify=across)

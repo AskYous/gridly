@@ -27,7 +27,7 @@ async def main():
         # --- every view setting is on the page
         await pilot.press("comma"); await pilot.pause()
         assert isinstance(app.screen, SettingsScreen), app.screen
-        for key in ("column_width", "overflow", "padded", "centred"):
+        for key in ("column_width", "overflow", "padded", "centred", "booleans"):
             assert app.screen.query_one(f"#set-{key}", Select).value == getattr(
                 app.appearance, key
             )
@@ -38,10 +38,12 @@ async def main():
         pick(app, "overflow", "wrap")
         pick(app, "padded", True)
         pick(app, "centred", False)
+        pick(app, "booleans", "boxes")
         await pilot.pause()
         await pilot.press("ctrl+s"); await pilot.pause()
         print("after save   :", app.appearance)
         assert (app.appearance.column_width, app.appearance.overflow) == ("small", "wrap")
+        assert app.appearance.booleans == "boxes"
         assert app.screen is app.screen_stack[0]
 
         # --- escape leaves everything as it was

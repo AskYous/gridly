@@ -46,6 +46,17 @@ SETTINGS = [
         ],
     ),
     (
+        "booleans",
+        "Yes / no values",
+        "How a yes/no column shows its values.",
+        [
+            ("✓ Yes  ✗ No — a mark and a word", "both"),
+            ("Yes  No — just the word", "words"),
+            ("✓  ✗ — just the mark", "symbols"),
+            ("[x]  [ ] — a checkbox", "boxes"),
+        ],
+    ),
+    (
         "padded",
         "Row padding",
         "A blank line above and below each value, whatever height it needs.",
