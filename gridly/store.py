@@ -380,6 +380,26 @@ class Sheet:
                 except ValidationError:
                     row.values[column.id] = None
 
+    # ------------------------------------------------------------------ sort
+
+    def sort_text(self) -> str:
+        """How the sheet is sorted, as sorting.encode wrote it — empty if not.
+
+        Kept in the meta table, which undo never touches: a sort is a way of
+        looking at the rows, not a change to them, so taking back an edit
+        should not also take back how the sheet is sorted.
+        """
+        found = self.db.execute("SELECT value FROM meta WHERE key = 'sort'").fetchone()
+        return found["value"] if found else ""
+
+    def set_sort_text(self, text: str) -> None:
+        self.db.execute(
+            "INSERT INTO meta (key, value) VALUES ('sort', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (text,),
+        )
+        self.db.commit()
+
     def counts(self) -> tuple[int, int]:
         cols = self.db.execute("SELECT COUNT(*) AS n FROM columns").fetchone()["n"]
         rows = self.db.execute("SELECT COUNT(*) AS n FROM rows").fetchone()["n"]

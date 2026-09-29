@@ -7,6 +7,7 @@ they had grown past six hundred lines.
 from .columns import ColumnScreen, ColumnSpec, OptionRow
 from .dialogs import ConfirmScreen, ExportScreen, HelpScreen
 from .settings import SETTINGS, SettingsScreen
+from .sorting import SortScreen
 from .values import (
     CLEAR_OPTION,
     CellEditScreen,
@@ -35,6 +36,7 @@ __all__ = [
     "RowFormScreen",
     "SETTINGS",
     "SettingsScreen",
+    "SortScreen",
     "build_editor",
     "read_editor",
 ]

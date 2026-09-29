@@ -33,11 +33,14 @@ from .screens import (
     RowChanges,
     RowFormScreen,
     SettingsScreen,
+    SortScreen,
 )
 from .clipboard import format_block, parse_block, to_system_clipboard
 from .csvfile import write_csv
 from .formulas import Formula, read_sum, reads_of
 from .picker import PickerScreen
+from .sorting import DIRECTIONS, Level, out_of_order, sort_rows
+from .sorting import decode as decode_sort, encode as encode_sort
 from .store import Column, Row, Sheet
 from .appearance import (
     COLUMN_WIDTHS,
@@ -107,6 +110,8 @@ class GridlyApp(App[None]):
         Binding("slash", "search", "Find", show=False, key_display="/"),
         Binding("n", "next_match", "Next match", show=False),
         Binding("N", "previous_match", "Previous match", show=False),
+        Binding("S", "sort", "Sort", show=False),
+        Binding("r", "resort", "Re-sort", show=False),
         Binding("u", "undo", "Undo", show=False),
         Binding("U", "redo", "Redo", show=False),
         Binding("y", "copy_cell", "Copy", show=False),
@@ -157,6 +162,8 @@ class GridlyApp(App[None]):
         ("search", "Find", "Look for text anywhere in the sheet", True),
         ("next_match", "Next match", "Jump to the match after this one", True),
         ("previous_match", "Previous match", "Jump to the match before this one", True),
+        ("sort", "Sort rows", "By a column, then others to break ties", True),
+        ("resort", "Re-sort", "Put rows marked ↕ back where the sort wants them", True),
         ("undo", "Undo", "Take back the last change", True),
         ("redo", "Redo", "Put back what undo took away", True),
         ("toggle_padding", "Toggle row padding", "A blank line above and below each value", True),
@@ -254,6 +261,16 @@ class GridlyApp(App[None]):
         self._extending = 0
         #: How wide each column was drawn last time, to notice when that moves.
         self._widths: list[int | None] = []
+        #: How the rows are sorted, most important column first. Empty if not.
+        self._levels: list[Level] = []
+        #: The row ids in the order they were last shown, while sorted. A row
+        #: added or changed keeps its place in this until r, rather than
+        #: jumping away from under the cursor; None sorts afresh next redraw.
+        self._order: list[int] | None = None
+        #: Rows added or changed since the last sort, and of those, the ones
+        #: now in the wrong place — what the ↕ beside the row number marks.
+        self._touched: set[int] = set()
+        self._misplaced: set[int] = set()
         # How many lines each row is given. Also only a way of looking at the
         # sheet, but a taller row has room to show more of a multi-line value.
 
@@ -295,6 +312,7 @@ class GridlyApp(App[None]):
     def _open(self, path: str | Path) -> None:
         """Take up a sheet, and remember that it was opened."""
         self.sheet = Sheet(path, read_only=self.read_only)
+        self._order = None  # a different sheet's rows, sorted its own way
         self.sub_title = _short_path(self.sheet.path)
         if self.read_only:
             # Only looked at, and on a server a copy about to be deleted — not
@@ -336,7 +354,7 @@ class GridlyApp(App[None]):
         table.clear(columns=True)
 
         self._columns = self.sheet.columns()
-        self._rows = self.sheet.rows()
+        self._rows = self._arrange(self.sheet.rows())
 
         labels, drawn, widths = self._measure()
         self._widths = widths
@@ -363,6 +381,49 @@ class GridlyApp(App[None]):
             self._look_for(self._query)  # the rows may not be the same ones
         self._update_status()
 
+    def _arrange(self, rows: list[Row]) -> list[Row]:
+        """The rows in the order they are shown.
+
+        Unsorted, that is the file's order. Sorted, it is the order the rows
+        were in when last shown, so an edit does not send its row flying — with
+        anything not seen before at the bottom — until the sort is run again.
+        """
+        self._levels = decode_sort(self.sheet.sort_text(), self._columns)
+        self._misplaced = set()
+        if not self._levels:
+            self._order = None
+            self._touched = set()
+            return rows
+        if self._order is None:
+            self._touched = set()
+            shown = sort_rows(rows, self._columns, self._levels)
+        else:
+            by_id = {row.id: row for row in rows}
+            shown = [by_id.pop(row_id) for row_id in self._order if row_id in by_id]
+            shown += by_id.values()  # added some way nothing kept track of
+            self._touched |= set(by_id)
+        self._order = [row.id for row in shown]
+        for index, row in enumerate(shown):
+            if row.id not in self._touched:
+                continue
+            above = shown[index - 1] if index else None
+            below = shown[index + 1] if index + 1 < len(shown) else None
+            if (above and out_of_order(above, row, self._columns, self._levels)) or (
+                below and out_of_order(row, below, self._columns, self._levels)
+            ):
+                self._misplaced.add(row.id)
+        return shown
+
+    def _place(self, row_id: int, after: int | None = None) -> None:
+        """Keep a new row where it was made — under `after`, or at the bottom."""
+        if self._order is None:
+            return  # not sorted, so the file's order is the one shown
+        if after in self._order:
+            self._order.insert(self._order.index(after) + 1, row_id)
+        else:
+            self._order.append(row_id)
+        self._touched.add(row_id)
+
     def _measure(self) -> tuple[list[Text], dict[int, list[Text]], list[int | None]]:
         """Draw every cell, and work out how wide that leaves each column."""
         drawn = {
@@ -373,7 +434,7 @@ class GridlyApp(App[None]):
             for column in self._columns
         }
         labels = [
-            field_label(column, self.appearance.centred)
+            self._sort_mark(field_label(column, self.appearance.centred), column)
             for column in self._columns
         ]
         widths = self.appearance.widths(
@@ -383,6 +444,21 @@ class GridlyApp(App[None]):
             *self._room(),
         )
         return labels, drawn, widths
+
+    def _sort_mark(self, label: Text, column: Column) -> Text:
+        """An arrow on a heading the rows are sorted by, so the grid says so.
+
+        Otherwise a sorted sheet looks like any other, and a row moved by hand
+        would be moved straight back. Where the sort has more than one column,
+        a number beside each arrow says which comes first.
+        """
+        for rank, level in enumerate(self._levels, start=1):
+            if level.column_id == column.id:
+                mark = "↓" if level.descending else "↑"
+                if len(self._levels) > 1:
+                    mark += str(rank)
+                label.append(f" {mark}", "bold yellow")
+        return label
 
     def _row_labels(self) -> list[Text]:
         """Each row's number, and before it how many comments it has, if any.
@@ -398,12 +474,12 @@ class GridlyApp(App[None]):
         room = max(map(len, marks), default=0)
         digits = len(str(len(self._rows)))
         labels = []
-        for number, mark in enumerate(marks, start=1):
-            if not room:
-                labels.append(Text(str(number), "dim"))
-                continue
-            label = Text(mark.ljust(room) + " ")
-            label.append(str(number).rjust(digits), "dim")
+        for number, (row, mark) in enumerate(zip(self._rows, marks), start=1):
+            label = Text(mark.ljust(room) + " ") if room else Text()
+            if self._misplaced:
+                # A row the sort would put somewhere else, until r puts it there.
+                label.append("↕ " if row.id in self._misplaced else "  ", "bold yellow")
+            label.append(str(number).rjust(digits) if room else str(number), "dim")
             labels.append(label)
         return labels
 
@@ -446,6 +522,10 @@ class GridlyApp(App[None]):
                 f"  ·  {end.row - start.row + 1} × {end.column - start.column + 1}"
                 " selected"
             )
+        if self._levels:
+            detail += f"  ·  sorted by {self._sorted_by()}"
+            if self._misplaced:
+                detail += f", {len(self._misplaced)} ↕ out of order (r)"
         if column is not None:
             detail += f"  ·  {column.name}: {column.type.label}"
             spec = column.computed
@@ -463,6 +543,15 @@ class GridlyApp(App[None]):
             line.append(")", "dim")
         line.append("  ·  ? for help", "dim")
         self.query_one("#status", Static).update(line)
+
+    def _sorted_by(self) -> str:
+        """The sort in words: each column, and which way round it goes."""
+        found = {column.id: column for column in self._columns}
+        return ", then ".join(
+            f"{found[level.column_id].name} "
+            f"({DIRECTIONS[found[level.column_id].type][level.descending]})"
+            for level in self._levels
+        )
 
     def _show_cycle(self, title: str, options: tuple[str, ...], current: str) -> None:
         """Put the whole cycle on screen so it is clear what the key steps through."""
@@ -815,6 +904,16 @@ class GridlyApp(App[None]):
         holder = self.sheet.holder_of(column.id, value, ignoring=row.id)
         if holder is None:
             return None
+        # The sheet counts rows in the file's order; a sorted grid numbers
+        # them the way it shows them, and that is the number to give.
+        holder = next(
+            (
+                number
+                for number, other in enumerate(self._rows, start=1)
+                if other.id != row.id and other.values.get(column.id) == value
+            ),
+            holder,
+        )
         return f"{column.name} has to be unique — row {holder} already has that"
 
     def _write(self, row: Row, column: Column, value: Any) -> None:
@@ -826,7 +925,14 @@ class GridlyApp(App[None]):
             return
         self.sheet.set_cell(row.id, column.id, value)
         row.values[column.id] = value
-        if self.appearance.wrapping or self._feeds(column) or self._widths_moved():
+        if self._levels:
+            self._touched.add(row.id)
+        if (
+            self.appearance.wrapping
+            or self._feeds(column)
+            or self._widths_moved()
+            or self._levels  # the row may have gone out of order, or back in
+        ):
             # The value may need a different number of lines than the row has,
             # or leave its column a different width, or be read by a column that
             # works itself out — and only a redraw can change any of those.
@@ -873,6 +979,8 @@ class GridlyApp(App[None]):
             ]
             # One change however much of the row it covers, so a status moved
             # and the comment saying why are taken back together.
+            if self._levels:
+                self._touched.add(row.id)
             with self.sheet.change(f"edit row {number}"):
                 for column_id, value in changed:
                     self.sheet.set_cell(row.id, column_id, value)
@@ -1060,9 +1168,12 @@ class GridlyApp(App[None]):
         # caught as well as one that clashes with what is already there.
         laid: dict[int, set] = {}
         with self.sheet.change(f"paste {shape}"):
-            for _ in range(new_rows):
-                self.sheet.add_row()
-            rows = self.sheet.rows()
+            added = [self.sheet.add_row() for _ in range(new_rows)]
+            for row_id in added:
+                self._place(row_id)
+            # Laid over the rows as they are shown, which a sort may have
+            # put in a different order from the file's.
+            rows = [row.id for row in self._rows] + added
             for record_index, column, raw in plan:
                 if column.computed is not None:
                     worked_out += 1
@@ -1072,15 +1183,17 @@ class GridlyApp(App[None]):
                 except ValidationError:
                     skipped += 1
                     continue
-                row = rows[record_index]
+                row_id = rows[record_index]
+                if self._levels:
+                    self._touched.add(row_id)
                 if column.unique and value is not None:
                     used = laid.setdefault(column.id, set())
-                    taken = self.sheet.holder_of(column.id, value, ignoring=row.id)
+                    taken = self.sheet.holder_of(column.id, value, ignoring=row_id)
                     if value in used or taken is not None:
                         repeated += 1
                         continue
                     used.add(value)
-                self.sheet.set_cell(row.id, column.id, value)
+                self.sheet.set_cell(row_id, column.id, value)
 
         self.reload()
         parts = [f"Pasted {shape}, u to undo"]
@@ -1117,7 +1230,7 @@ class GridlyApp(App[None]):
         if not self._columns:
             self.notify("Add a column first (c).", severity="warning")
             return
-        self.sheet.add_row()
+        self._place(self.sheet.add_row())
         field = self.table.cursor_coordinate.column
         self.reload(Coordinate(len(self._rows), field))
 
@@ -1128,7 +1241,8 @@ class GridlyApp(App[None]):
         row = self.current_row()
         at = self.table.cursor_coordinate
         record, field = at.row, at.column
-        self.sheet.add_row(after_position=row.position if row else None)
+        added = self.sheet.add_row(after_position=row.position if row else None)
+        self._place(added, after=row.id if row else None)
         self.reload(Coordinate(record + 1, field))
 
     def action_undo(self) -> None:
@@ -1136,6 +1250,7 @@ class GridlyApp(App[None]):
         if label is None:
             self.notify("Nothing to undo.", severity="warning")
             return
+        self._order = None  # what came back goes where the sort puts it
         self.reload()
         self.notify(f"Undid {label}. U puts it back.")
 
@@ -1144,6 +1259,7 @@ class GridlyApp(App[None]):
         if label is None:
             self.notify("Nothing to redo.", severity="warning")
             return
+        self._order = None
         self.reload()
         self.notify(f"Redid {label}.")
 
@@ -1156,7 +1272,7 @@ class GridlyApp(App[None]):
         number = self._rows.index(row) + 1
         at = self.table.cursor_coordinate
         record, field = at.row, at.column
-        self.sheet.duplicate_row(row.id)
+        self._place(self.sheet.duplicate_row(row.id), after=row.id)
         self.reload(Coordinate(record + 1, field))
         unique = [c.name for c in self._columns if c.unique]
         note = f"Row {number} copied to row {number + 1}."
@@ -1236,6 +1352,8 @@ class GridlyApp(App[None]):
                 spec.formula,
                 spec.align,
             )
+            if any(level.column_id == column.id for level in self._levels):
+                self._order = None  # its values may compare differently now
             self.reload()
             if sum_ := self._worked_out(spec):
                 self.notify(f"{spec.name} now shows {sum_}, and follows it.")
@@ -1263,6 +1381,8 @@ class GridlyApp(App[None]):
             return
 
         orphaned = self.sheet.delete_column(column.id)
+        if any(level.column_id == column.id for level in self._levels):
+            self._order = None  # the sort has lost a column, so sort again
         self.reload()
         note = f"Deleted column {column.name!r}."
         if orphaned:
@@ -1277,6 +1397,14 @@ class GridlyApp(App[None]):
         row = self.current_row()
         if row is None:
             return
+        if self._levels:
+            # The sort decides the order, so a row moved by hand would only
+            # be moved back — and in the file it would land somewhere unseen.
+            self.notify(
+                "Sorted, so rows cannot be moved by hand — S to turn sorting off.",
+                severity="warning",
+            )
+            return
         at = self.table.cursor_coordinate
         if self.sheet.move_row(row.id, offset):
             self.reload(Coordinate(at.row + offset, at.column))
@@ -1289,6 +1417,53 @@ class GridlyApp(App[None]):
         record, field = at.row, at.column
         if self.sheet.move_column(column.id, offset):
             self.reload(Coordinate(record, field + offset))
+
+    # ---------------------------------------------------------------- sorting
+
+    def action_sort(self) -> None:
+        """Pick the columns to sort by. Nothing picked turns sorting off."""
+        if not self._columns:
+            self.notify("Nothing to sort yet.", severity="warning")
+            return
+
+        def done(levels: list[Level] | None) -> None:
+            if levels is None:
+                return
+            self.sheet.set_sort_text(encode_sort(levels))
+            self._resort()
+            if self._levels:
+                self.notify(f"Sorted by {self._sorted_by()}.")
+            else:
+                self.notify("Sorting off — rows are back in their own order.")
+
+        self.push_screen(
+            SortScreen(self._columns, self._levels, self.current_column()), done
+        )
+
+    def action_resort(self) -> None:
+        """Put every row where the sort wants it, the ↕ ones included."""
+        if not self._levels:
+            self.notify("Not sorted — S to sort.", severity="warning")
+            return
+        moved = len(self._misplaced)
+        self._resort()
+        self.notify(
+            f"Re-sorted — {moved} {_plural(moved, 'row')} moved into place."
+            if moved
+            else "Re-sorted — everything was already in place."
+        )
+
+    def _resort(self) -> None:
+        """Sort afresh, keeping the cursor on the row it was on."""
+        row = self.current_row()
+        field = self.table.cursor_coordinate.column
+        self._order = None
+        self.reload()
+        if row is not None:
+            record = next(
+                (i for i, other in enumerate(self._rows) if other.id == row.id), 0
+            )
+            self.table.cursor_coordinate = Coordinate(record, field)
 
     # ------------------------------------------------------------------ misc
 

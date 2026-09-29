@@ -100,6 +100,11 @@ class HelpScreen(ModalScreen[None]):
             ("{ / }", "Move the row up / down (or alt+↑ / ↓)"),
             ("[ / ]", "Move the column left / right"),
         ]),
+        ("Sorting", [
+            ("S", "Sort by a column, then others for ties"),
+            ("r", "Re-sort: move rows marked ↕ into place"),
+            ("", "added and edited rows stay put until then"),
+        ]),
         ("Sheets", [
             ("o", "Open another sheet"),
         ]),

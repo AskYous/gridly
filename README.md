@@ -175,6 +175,8 @@ themselves out* below.
 | `{` / `}`   | move the current row up / down (or alt+↑/↓)   |
 | `[` / `]`   | move the current column left / right          |
 | `o`         | open another sheet                            |
+| `S`         | sort by a column, then others to break ties   |
+| `r`         | re-sort: move rows marked ↕ into place        |
 | `/`         | search every cell                             |
 | `n` / `N`   | next / previous match                         |
 | shift+arrows| select a block of cells                       |
@@ -545,6 +547,23 @@ back where it was before you started.
 
 Matches follow the sheet: edit a cell or delete a row and the count and
 highlights are worked out again.
+
+## Sorting
+
+`S` picks a column to sort by, and up to two more for rows that tie on it —
+Status, then Due, newest first. A dropdown sorts in the order its options are
+listed, so Low, Medium, High comes out that way rather than alphabetically, and
+an empty cell goes last whichever way round.
+
+A sort only changes how the rows are shown. The file keeps its own order, so
+turning sorting off (`S`, then *Turn sorting off*) puts every row back where it
+was. The sort is kept in the sheet, and comes back when it is opened again.
+
+A row you add or edit while sorted stays where it is rather than jumping away
+from under the cursor. If it no longer belongs there it gets a `↕` beside its
+number and the status line counts it; `r` sorts again and puts it in place,
+with the cursor following. Undo sorts again too. Rows cannot be moved by hand
+with `{` / `}` while sorted, since the sort decides their order.
 
 ## Copying out
 
