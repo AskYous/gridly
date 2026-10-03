@@ -56,7 +56,7 @@ _HINTS = {
     ColumnType.NUMBER: "e.g. 42 or 3.14",
     ColumnType.BOOLEAN: "yes / no",
     ColumnType.DATE: "YYYY-MM-DD (or 'today')",
-    ColumnType.TIME: "9:30, 14:05, 9:30 pm",
+    ColumnType.TIME: "9:30, 14:05, 9:30 pm (or 'now')",
     ColumnType.SELECT: "one of the column's options",
 }
 
@@ -137,7 +137,10 @@ def parse(
         raise ValidationError(f"{raw!r} is not a date (try YYYY-MM-DD)")
 
     if coltype is ColumnType.TIME:
-        read = _parse_time(raw)
+        if raw.lower() == "now":
+            read = datetime.now().time().replace(microsecond=0)
+        else:
+            read = _parse_time(raw)
         # A column that does not show seconds does not keep them either, so
         # what is stored is always what is on screen.
         return read if fmt == "seconds" else read.replace(second=0)

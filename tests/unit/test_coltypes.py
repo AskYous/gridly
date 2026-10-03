@@ -79,6 +79,17 @@ def test_today():
     assert parse(T.DATE, "today", []) == datetime.date.today()
 
 
+@pytest.mark.parametrize("fmt", ["", "seconds"])
+def test_a_time_can_be_typed_as_now(fmt):
+    before = datetime.datetime.now().replace(microsecond=0)
+    read = parse(T.TIME, "Now", [], fmt)
+    after = datetime.datetime.now()
+    if fmt == "":
+        assert read.second == 0
+        before = before.replace(second=0)
+    assert before.time() <= read <= after.time()
+
+
 @pytest.mark.parametrize(
     "coltype, value",
     [

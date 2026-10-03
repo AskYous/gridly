@@ -878,10 +878,16 @@ class GridlyApp(App[None]):
         return True
 
     def _describes(self, spec: Formula) -> str:
-        """What works a column out, read aloud: its sum, or the month or weekday of what."""
+        """What works a column out, read aloud: its sum, the month or weekday of
+        what, or the hours between which times."""
         if spec.fn == "sum":
             return spec.expr
         source = self.sheet.column(spec.source) if self.sheet else None
+        if spec.fn == "hours":
+            until = self.sheet.column(spec.until) if self.sheet else None
+            if source is None or until is None:
+                return "hours between two times"
+            return f"the hours from {source.name} to {until.name}"
         return f"the {spec.fn} of {source.name}" if source is not None else f"a {spec.fn}"
 
     def _feeds(self, column: Column) -> bool:

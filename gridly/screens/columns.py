@@ -121,6 +121,10 @@ class ColumnScreen(ModalScreen[ColumnSpec | None]):
         self.all = list(columns or [])
         #: The ones a month or weekday can be taken from.
         self.sources = sources_among(self.all, exclude=column.id if column else 0)
+        #: The ones hours can be counted between.
+        self.times = sources_among(
+            self.all, exclude=column.id if column else 0, coltype=ColumnType.TIME
+        )
         #: What this column already holds, offered as options on turning into
         #: a dropdown, so a text column with little variety needs no retyping.
         self.existing_values = existing_values or []
@@ -188,6 +192,26 @@ class ColumnScreen(ModalScreen[ColumnSpec | None]):
                         allow_blank=False,
                         id="shows",
                     )
+                    # Hours read two times. A new column guesses the sheet's
+                    # first two in order, which is how a start and an end sit.
+                    hours = spec if spec and spec.fn == "hours" else None
+                    known = {t.id for t in self.times}
+                    guess = [t.id for t in self.times[:2]]
+                    for key, label, fallback, picked in (
+                        ("start", "From", guess[:1], hours and hours.source),
+                        ("end", "To", guess[1:2], hours and hours.until),
+                    ):
+                        yield Label(label, classes="field-label", id=f"{key}-label")
+                        yield Select(
+                            [(t.name, t.id) for t in self.times],
+                            value=(
+                                picked
+                                if picked in known
+                                else (fallback[0] if fallback and not hours else Select.NULL)
+                            ),
+                            prompt="(choose a time column)",
+                            id=key,
+                        )
                     yield Label("Formula", classes="field-label", id="expr-label")
                     yield Input(
                         value=spec.expr if spec else "",
@@ -268,6 +292,10 @@ class ColumnScreen(ModalScreen[ColumnSpec | None]):
         # which date and how the part should be written.
         is_part = self._selected_function() in WORDINGS
         is_sum = self._selected_function() == "sum"
+        is_hours = self._selected_function() == "hours"
+        for key in ("start", "end"):
+            self.query_one(f"#{key}-label", Label).display = is_hours
+            self.query_one(f"#{key}", Select).display = is_hours
         self.query_one("#format-label", Label).display = is_time
         self.query_one("#format", Select).display = is_time
         self.query_one("#source-label", Label).display = is_part
@@ -310,6 +338,10 @@ class ColumnScreen(ModalScreen[ColumnSpec | None]):
     @on(Select.Changed, "#function")
     def function_changed(self) -> None:
         self._offer_wordings()
+        # Hours only go in a number column, and a sum reading them needs one,
+        # so the type follows rather than being left for the save to refuse.
+        if self._selected_function() == "hours":
+            self.query_one("#type", Select).value = ColumnType.NUMBER.value
         self._sync_options_field()
 
     def _offer_wordings(self) -> None:
@@ -378,6 +410,19 @@ class ColumnScreen(ModalScreen[ColumnSpec | None]):
                     return self._error(
                         f"{name} would be worked out from itself, round in a circle"
                     )
+            elif function == "hours":
+                if len(self.times) < 2:
+                    return self._error(
+                        "Hours are counted between two time columns — "
+                        "this sheet needs two first"
+                    )
+                start = self.query_one("#start", Select).value
+                end = self.query_one("#end", Select).value
+                if start is Select.NULL or end is Select.NULL:
+                    return self._error("Say which times the hours are counted between")
+                if start == end:
+                    return self._error("Count the hours between two different times")
+                spec = Formula("hours", int(start), until=int(end))
             else:
                 if not self.sources:
                     return self._error(

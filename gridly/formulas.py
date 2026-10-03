@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, time
 
 from . import arithmetic
 from .coltypes import ColumnType, display
@@ -22,10 +22,15 @@ FUNCTIONS = {
     "sum": "Calculated",
     "month": "Month of a date",
     "weekday": "Weekday of a date",
+    "hours": "Hours between two times",
 }
 
 #: The types a sum can be written into — whatever can hold a number.
 SUM_TYPES = (ColumnType.NUMBER, ColumnType.TEXT)
+
+#: The types hours can be written into. Only a number, so a sum can read them
+#: — a pay column is the usual reason to count hours in the first place.
+HOURS_TYPES = (ColumnType.NUMBER,)
 
 #: The ways a month can be written, and September 2026 written each way.
 MONTH_WORDINGS = {
@@ -71,11 +76,14 @@ class Formula:
     """What a computed column works out: which sum, from where, written how."""
 
     fn: str
-    #: The id of the column a month or weekday is read from. Unused by a sum.
+    #: The id of the column a month or weekday is read from, or the time hours
+    #: are counted from. Unused by a sum.
     source: int = 0
     shows: str = DEFAULT_WORDING
     #: The arithmetic a sum is worked out by, written in column names.
     expr: str = ""
+    #: The id of the time hours are counted up to. Only hours use it.
+    until: int = 0
 
     def encode(self) -> str:
         """How a formula is kept in the column's row. Empty means none."""
@@ -85,6 +93,7 @@ class Formula:
                 "source": self.source,
                 "shows": self.shows,
                 "expr": self.expr,
+                "until": self.until,
             }
         )
 
@@ -98,13 +107,16 @@ class Formula:
             fn = spec["fn"]
             source = int(spec.get("source", 0))
             expr = str(spec.get("expr", ""))
+            until = int(spec.get("until", 0))
         except (ValueError, TypeError, KeyError, AttributeError):
             return None
         if fn not in FUNCTIONS or (fn == "sum" and not expr.strip()):
             return None
         shows = spec.get("shows", DEFAULT_WORDING)
         wordings = WORDINGS.get(fn, MONTH_WORDINGS)
-        return cls(fn, source, shows if shows in wordings else DEFAULT_WORDING, expr)
+        return cls(
+            fn, source, shows if shows in wordings else DEFAULT_WORDING, expr, until
+        )
 
 
 def month_text(month: int, shows: str, year: int = 0) -> str:
@@ -139,6 +151,21 @@ def value_of(spec: Formula, source_type: ColumnType, source_value) -> str:
     return ""
 
 
+def hours_between(start, end) -> str:
+    """The hours from one time to another, as a number for the column to read.
+
+    An end before its start is taken to be the next day, so a shift that runs
+    past midnight counts the hours it was worked rather than going negative.
+    Either time missing is an empty answer, like a month with no date.
+    """
+    if not isinstance(start, time) or not isinstance(end, time):
+        return ""
+    seconds = lambda t: t.hour * 3600 + t.minute * 60 + t.second
+    worked = (seconds(end) - seconds(start)) % (24 * 3600)
+    hours = round(worked / 3600, arithmetic.PLACES)
+    return display(ColumnType.NUMBER, int(hours) if hours.is_integer() else hours)
+
+
 def options_for(spec: Formula) -> list[str]:
     """Every value the formula can produce, for a dropdown to list.
 
@@ -156,6 +183,10 @@ def refusal(spec: Formula, coltype: ColumnType) -> str | None:
         if coltype in SUM_TYPES:
             return None
         return f"A formula cannot go in a {coltype.label.lower()} column"
+    if spec.fn == "hours":
+        if coltype in HOURS_TYPES:
+            return None
+        return f"Hours go in a number column, not a {coltype.label.lower()} one"
     if coltype is ColumnType.TEXT:
         return None
     if spec.fn == "weekday":
@@ -176,12 +207,15 @@ def refusal(spec: Formula, coltype: ColumnType) -> str | None:
     return f"A month cannot go in a {coltype.label.lower()} column"
 
 
-def sources_among(columns, exclude: int = 0) -> list:
-    """The columns a month or weekday can be taken from: dates not worked out."""
+def sources_among(
+    columns, exclude: int = 0, coltype: ColumnType = ColumnType.DATE
+) -> list:
+    """The columns a value can be taken from: dates for a month or weekday,
+    times for hours, and none of them worked out."""
     return [
         column
         for column in columns
-        if column.type is ColumnType.DATE
+        if column.type is coltype
         and column.id != exclude
         and column.computed is None
     ]
@@ -243,6 +277,8 @@ def reads_of(column, tree, columns) -> list[int]:
     spec = column.computed
     if spec is None:
         return []
+    if spec.fn == "hours":
+        return [spec.source, spec.until]
     if spec.fn != "sum":
         return [spec.source]
     if tree is None:

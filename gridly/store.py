@@ -22,6 +22,7 @@ from .coltypes import (
 )
 from .formulas import (
     Formula,
+    hours_between,
     read_sum,
     reading_order,
     reads_of,
@@ -369,6 +370,10 @@ class Sheet:
             for row in rows:
                 if spec.fn == "sum":
                     raw = sum_text(sums[column.id], columns, row.values)
+                elif spec.fn == "hours":
+                    raw = hours_between(
+                        row.values.get(spec.source), row.values.get(spec.until)
+                    )
                 elif source is None:
                     raw = ""
                 else:

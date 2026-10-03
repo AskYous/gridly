@@ -139,7 +139,7 @@ since the list of sheets is what the screen is for.
 | Number   | `42`, `3.14`, `1,200`                     |
 | Boolean  | `yes/no`, `y/n`, `true/false`, `1/0`      |
 | Date     | `2026-09-07`, `07/09/2026`, `today`       |
-| Time     | `9:30`, `14:05`, `9:30 pm`, `7`           |
+| Time     | `9:30`, `14:05`, `9:30 pm`, `7`, `now`    |
 | Dropdown | one of the options you define on the column, one per line |
 
 Bad input is refused with a message instead of being stored. Changing a
@@ -147,7 +147,8 @@ column's type converts the existing values where it can and clears the cells
 where it can't, telling you how many it dropped.
 
 A column can also be calculated from the others rather than typed into — a
-formula such as `Hours * 55`, or the month of a date. See *Columns that work
+formula such as `Hours * 55`, the month of a date, or the hours between two
+times. See *Columns that work
 themselves out* below.
 
 ## Keys
@@ -237,7 +238,7 @@ key binding has a palette entry, so the two cannot drift apart.
 
 ## Times
 
-A time column takes `9:30`, `14:05`, `9:30 pm`, `9.30pm` or just `7`, and always
+A time column takes `9:30`, `14:05`, `9:30 pm`, `9.30pm`, just `7`, or `now`, and always
 shows it on a twenty-four hour clock so the column reads and sorts straight.
 
 Each time column says how precise it is: hours and minutes, or seconds as well.
@@ -302,9 +303,9 @@ without being rewritten.
 ## Columns that work themselves out
 
 A column can take its values from another column instead of from you. In the
-column form (`c` or `e`), *Value* offers three of those beside the usual *Typed
-in*: **Calculated**, by a formula you write, **Month of a date** and **Weekday
-of a date**.
+column form (`c` or `e`), *Value* offers four of those beside the usual *Typed
+in*: **Calculated**, by a formula you write, **Month of a date**, **Weekday
+of a date** and **Hours between two times**.
 
 Nothing is stored. A worked-out column is worked out every time the sheet is
 read, so it can never be left standing beside a value that has since moved —
@@ -359,6 +360,17 @@ There is no number. Whether Sunday is the first day of the week or the seventh
 depends on where you are, and a number that means one thing to one reader and
 another to the next is worse than none.
 
+### Hours between two times
+
+Pick the time the hours count from and the time they count up to — a sheet's
+first two time columns are picked for you, in order. `16:00` to `17:30` is
+`1.5`, and `16:00` to `17:21` is `1.35`. An end before its start is the next
+day, so `22:00` to `02:00` is `4` rather than a negative. A row missing either
+time stays empty.
+
+The hours are a number column, so a formula can read them: `Pay = Hours * 55`
+pays out as soon as a shift has its start and end.
+
 ### What a worked-out column may be
 
 The column still has a type, and the answer has to fit it. A formula goes in a
@@ -366,7 +378,8 @@ number column, or a text one. A month has more to say: text takes any of the
 four wordings. A number column takes the month only as a number. A dropdown
 lists the twelve months itself — you do not type its options, and it will not
 take `2026-09`, which never stops adding new ones. A weekday goes in text or a
-dropdown, which lists the seven days from Monday. Anything else — a date, a
+dropdown, which lists the seven days from Monday. Hours go in a number column
+only, which picking them sets for you. Anything else — a date, a
 time, a yes/no — is refused in the form, with the reason.
 
 Delete a column that something else is worked out from, and that column stops

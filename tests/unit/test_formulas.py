@@ -9,10 +9,12 @@ from gridly.formulas import (
     MONTH_WORDINGS,
     WEEKDAY_WORDINGS,
     Formula,
+    hours_between,
     month_text,
     options_for,
     read_sum,
     reading_order,
+    reads_of,
     refusal,
     sources_among,
     unreadable,
@@ -234,3 +236,55 @@ def test_a_ring_of_columns_never_comes_up_at_all():
     ]
     sums = {c.id: read_sum(c.computed.expr, columns) for c in columns}
     assert [c.name for c in reading_order(columns, sums)] == ["Fine"]
+
+
+# -------------------------------------------------------------------- hours
+
+
+def at(hour, minute=0, second=0):
+    return datetime.time(hour, minute, second)
+
+
+@pytest.mark.parametrize(
+    "start, end, hours",
+    [
+        (at(16), at(17, 30), "1.5"),
+        (at(16), at(17, 21), "1.35"),
+        (at(12), at(16), "4"),
+        (at(9), at(9), "0"),
+        (at(22), at(2), "4"),  # past midnight is the next day, not minus twenty
+        (at(9), at(9, 0, 36), "0.01"),
+    ],
+)
+def test_the_hours_between_two_times(start, end, hours):
+    assert hours_between(start, end) == hours
+
+
+@pytest.mark.parametrize("start, end", [(None, at(17)), (at(16), None), ("16:00", at(17))])
+def test_hours_need_both_times_to_count_anything(start, end):
+    assert hours_between(start, end) == ""
+
+
+def test_an_hours_formula_survives_the_round_trip_to_storage():
+    spec = Formula("hours", 4, until=5)
+    assert Formula.decode(spec.encode()) == spec
+
+
+def test_hours_read_both_their_times():
+    column = Column(9, "Hours", T.NUMBER, formula=Formula("hours", 4, until=5).encode())
+    assert reads_of(column, None, []) == [4, 5]
+
+
+def test_hours_go_in_a_number_column_only():
+    assert refusal(Formula("hours", 4, until=5), T.NUMBER) is None
+    for coltype in (T.TEXT, T.DATE, T.TIME, T.BOOLEAN, T.SELECT):
+        assert "number" in refusal(Formula("hours", 4, until=5), coltype)
+
+
+def test_hours_are_counted_between_times_that_are_not_worked_out():
+    columns = [
+        Column(1, "Day", T.DATE),
+        Column(2, "Start", T.TIME),
+        Column(3, "End", T.TIME),
+    ]
+    assert [c.name for c in sources_among(columns, coltype=T.TIME)] == ["Start", "End"]
